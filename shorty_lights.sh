@@ -112,9 +112,10 @@ while [ -n "$1" ]; do
             ;;
         "highlight")
             # 0b001 - 0b110 / 1 - 6
-            [ -z "$2" ] && help 2
-            [ -z "$3" ] && help 2
-            [ $2 -gt 6 ] && help 2
+            if [ -z "$2" ] || [ -z "$3" ] || [ $2 -gt 6 ]; then
+                echo "invalid command: '$1 $2 $3'"
+                help 2
+            fi
             state=0
             [ "$3" == "1" ] && state=1
 
