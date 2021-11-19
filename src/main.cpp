@@ -35,15 +35,25 @@ Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
 bool backlight = false;
 uint32_t color_default = pixels.Color(3, 3, 3);
-uint32_t color_lit = pixels.Color(0, 0, 30);
 uint32_t color_off = pixels.Color(0, 0, 0);
+
+int button_colors[] = { 0, 0, 0, 0, 0, 0 };
+uint32_t colors[] = {
+    pixels.Color(0, 0, 30),
+    pixels.Color(0, 20, 20),
+    pixels.Color(0, 30, 0),
+    pixels.Color(20, 20, 0),
+    pixels.Color(30, 0, 0),
+    pixels.Color(20, 0, 20),
+    pixels.Color(12, 12, 12)
+};
 
 bool led_latch_handled = false;
 
 void handleLedStatus() {
     uint8_t led_status = Keyboard.readLedStatus();
 
-    int latch = led_status >> 3;
+    int latch = led_status >> 4; // bit 5
     if (latch == 1 && led_latch_handled) {
         return;
     }
@@ -53,17 +63,34 @@ void handleLedStatus() {
     }
 
     led_latch_handled = true;
-    int data = led_status & 7;
+    bool target_state = ((led_status >> 3 & 1) == 1); // bit 4
+    int data = led_status & 7; // bits 1-3
 
-    if (data == 0) { // b000
-        backlight = !backlight;
-    } else if (data >= 1 && data <= 6) { // b001 - b110
-        buttons_lit[data - 1] = !buttons_lit[data - 1];
-    } else if (data == 7) { // b111
-        for (int i = 0; i < BUTTON_COUNT; i++) {
-            buttons_lit[i] = false;
+    if (data == 0) { // 0b0000 / 0b1000
+        backlight = target_state;
+
+    } else if (data >= 1 && data <= 6) { // 0bX001 - 0bX110
+        if (target_state && !buttons_lit[data - 1]) { // turn on
+            buttons_lit[data - 1] = true;
+        } else if (target_state) { // already on, next color
+            button_colors[data - 1]++;
+            if (button_colors[data - 1] > 6) button_colors[data - 1] = 0;
+
+        } else if (buttons_lit[data - 1]) { // turn off
+            buttons_lit[data - 1] = false;
+        } else { // already off, reset color
+            button_colors[data - 1] = 0;
         }
-        backlight = false;
+
+    } else if (data == 7) { // 0bX111
+        if (!target_state) { // 0b0111
+            for (int i = 0; i < BUTTON_COUNT; i++) {
+                buttons_lit[i] = false;
+                button_colors[i] = 0;
+            }
+        } else { // 0b1111
+            //@ToDo: add simple effect
+        }
     }
 }
 
@@ -108,7 +135,7 @@ void loop() {
             pixels.setPixelColor(i, pixels.Color(0, 20, 0));
 
         } else if (buttons_lit[i]) {
-            pixels.setPixelColor(i, color_lit);
+            pixels.setPixelColor(i, colors[button_colors[i]]);
 
         } else if(backlight) {
             pixels.setPixelColor(i, color_default);
@@ -124,6 +151,6 @@ void loop() {
 
     pixels.show();
 
-    delay(100);
+    delay(50);
 }
 
