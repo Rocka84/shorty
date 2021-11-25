@@ -7,15 +7,26 @@
  #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
 
-#define BUTTON_COUNT 6
-#define PIN_NEOPIXELS 6
+#define SERIALDBG
+#define WIFI_ESP
 
+#ifdef WIFI_ESP
+#include <MqttWrapper.h>
+#include <secrets.h>
+#endif
+
+#define BUTTON_COUNT 6
 #define PIN_BTN_A   2
 #define PIN_BTN_B   3
 #define PIN_BTN_C   4
 #define PIN_BTN_D   5
-#define PIN_BTN_E   7
-#define PIN_BTN_F   8
+#define PIN_BTN_E   6
+#define PIN_BTN_F   7
+
+#define PIN_NEOPIXELS 8
+
+#define PIN_ESP_TX  14
+#define PIN_ESP_RX  15
 
 byte button_pins[] = {PIN_BTN_A, PIN_BTN_B, PIN_BTN_C,
                         PIN_BTN_D, PIN_BTN_E, PIN_BTN_F};
@@ -49,6 +60,10 @@ uint32_t colors[] = {
 };
 
 bool led_latch_handled = false;
+
+#ifdef WIFI_ESP
+MqttWrapper mqtt(WIFI_SSID, WIFI_PASSWORD, MQTT_HOST, 1883, "shorty");
+#endif
 
 void handleLedStatus() {
     uint8_t led_status = Keyboard.readLedStatus();
@@ -95,11 +110,148 @@ void handleLedStatus() {
 }
 
 void sendButtonKey(int index){
+    if (button_keys[index] == 0) return;
+
     Keyboard.sendKeyStroke(button_keys[index]);
 }
 
+void handleButton(int i) {
+    buttons[i].read();
+
+    if (i == 0 && buttons[0].isPressed() && buttons[BUTTON_COUNT-1].isPressed()) {
+        backlight = !backlight;
+        buttons_suppressed[0] = true;
+        buttons_suppressed[BUTTON_COUNT-1] = true;
+        i = BUTTON_COUNT;
+
+#ifdef SERIALDBG
+        Serial.print("backlight switched to ");
+        Serial.println(backlight);
+#endif
+    }
+
+    if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
+        sendButtonKey(i + BUTTON_COUNT);
+        pixels.setPixelColor(i, pixels.Color(0, 20, 20));
+        buttons_suppressed[i] = true;
+
+#ifdef SERIALDBG
+    Serial.print("long-press ");
+    Serial.println(i);
+#endif
+
+    } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
+        sendButtonKey(i);
+        pixels.setPixelColor(i, pixels.Color(0, 0, 30));
+
+#ifdef SERIALDBG
+    Serial.print("press ");
+    Serial.println(i);
+#endif
+
+    } else if (buttons[i].isPressed()) {
+        pixels.setPixelColor(i, pixels.Color(0, 20, 0));
+
+    } else if (buttons_lit[i]) {
+        pixels.setPixelColor(i, colors[button_colors[i]]);
+
+    } else if(backlight) {
+        pixels.setPixelColor(i, color_default);
+
+    } else {
+        pixels.setPixelColor(i, color_off);
+    }
+
+    if (buttons[i].wasReleased()) {
+        buttons_suppressed[i] = false;
+    }
+}
+
+#ifdef WIFI_ESP
+bool payloadToBool(String payload_str, bool current) {
+    if (payload_str == "off" || payload_str == "OFF" || payload_str == "0") {
+        return false;
+    } else if (payload_str == "on" || payload_str == "ON" || payload_str == "1") {
+        return true;
+    } else if (payload_str == "toggle" || payload_str == "TOGGLE" || payload_str == "2") {
+        return !current;
+    }
+
+    return current;
+}
+
+int hexToInt(String hex){
+    char c[hex.length() + 1];
+    hex.toCharArray(c, hex.length() + 1);
+    return (int) strtol(c, NULL, 16);
+}
+
+uint32_t payloadToColor(String payload_str, uint32_t current) {
+    payload_str.trim();
+    if (payload_str.length() == 1) {
+        int index = payload_str.toInt() % 7;
+
+        return colors[index];
+    } else if (payload_str.startsWith("#")) {
+        // hex color
+        return pixels.Color(
+                hexToInt(payload_str.substring(1, 2)),
+                hexToInt(payload_str.substring(3, 2)),
+                hexToInt(payload_str.substring(5, 2)));
+    } else if (payload_str.startsWith("(")) {
+        // int color
+        return pixels.Color(
+                payload_str.substring(1, 3).toInt(),
+                payload_str.substring(5, 3).toInt(),
+                payload_str.substring(9, 3).toInt());
+
+    }
+
+    return current;
+}
+
+String payloadToString(byte* payload, unsigned int length) {
+    char payload_chars[length];
+    for (unsigned int i = 0; i < length; i++) {
+        payload_chars[i] = (char) payload[i];
+    }
+    return String(payload_chars);
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+#ifdef SERIALDBG
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+#endif
+
+    String topic_str = String(topic);
+    String payload_str = payloadToString(payload, length);
+
+#ifdef SERIALDBG
+    Serial.println(payload_str);
+#endif
+
+    if (topic_str == "shorty/command/backlight/power") {
+        backlight = payloadToBool(payload_str, backlight);
+
+    } else if (topic_str.startsWith("shorty/command/led")) {
+        int index = topic_str.substring(19, 1).toInt();
+
+        if (topic_str.endsWith("/power")) {
+            buttons_lit[index] = payloadToBool(payload_str, buttons_lit[index]);
+        } else if (topic_str.endsWith("/color")) {
+            button_colors[index] = payloadToColor(payload_str, button_colors[index]);
+        }
+    }
+}
+#endif
+
 
 void setup() {
+#ifdef SERIALDBG
+    Serial.begin(9600);
+#endif
     for (int i = 0; i < BUTTON_COUNT; i++) {
         buttons[i].begin();
     }
@@ -107,46 +259,22 @@ void setup() {
     Keyboard.init();
     pixels.begin();
     pixels.clear();
+
+#ifdef WIFI_ESP
+    mqtt.connect();
+    mqtt.setCallback(mqttCallback);
+    mqtt.subscribe("shorty/#");
+#endif
 }
 
 void loop() {
     handleLedStatus();
+#ifdef WIFI_ESP
+    mqtt.loop();
+#endif
 
     for (int i = 0; i < BUTTON_COUNT; i++) {
-        buttons[i].read();
-
-        if (i == 0 && buttons[0].isPressed() && buttons[BUTTON_COUNT-1].isPressed()) {
-            backlight = !backlight;
-            buttons_suppressed[0] = true;
-            buttons_suppressed[BUTTON_COUNT-1] = true;
-            i = BUTTON_COUNT;
-        }
-
-        if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
-            sendButtonKey(i + BUTTON_COUNT);
-            pixels.setPixelColor(i, pixels.Color(0, 20, 20));
-            buttons_suppressed[i] = true;
-
-        } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
-            sendButtonKey(i);
-            pixels.setPixelColor(i, pixels.Color(0, 0, 30));
-
-        } else if (buttons[i].isPressed()) {
-            pixels.setPixelColor(i, pixels.Color(0, 20, 0));
-
-        } else if (buttons_lit[i]) {
-            pixels.setPixelColor(i, colors[button_colors[i]]);
-
-        } else if(backlight) {
-            pixels.setPixelColor(i, color_default);
-
-        } else {
-            pixels.setPixelColor(i, color_off);
-        }
-
-        if (buttons[i].wasReleased()) {
-            buttons_suppressed[i] = false;
-        }
+        handleButton(i);
     }
 
     pixels.show();
