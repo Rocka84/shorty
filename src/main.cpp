@@ -4,15 +4,18 @@
 
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
- #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
 
-#define SERIALDBG
-#define WIFI_ESP
+// #define SERIALDBG
+// #define WIFI_ESP
 
 #ifdef WIFI_ESP
 #include <MqttWrapper.h>
 #include <secrets.h>
+
+#define PIN_ESP_TX  14
+#define PIN_ESP_RX  15
 #endif
 
 #define BUTTON_COUNT 6
@@ -23,10 +26,12 @@
 #define PIN_BTN_E   6
 #define PIN_BTN_F   7
 
-#define PIN_NEOPIXELS 8
+#define PIN_NEOPIXELS 9
 
-#define PIN_ESP_TX  14
-#define PIN_ESP_RX  15
+#ifdef SERIALDBG
+#include <SoftwareSerial.h>
+SoftwareSerial Debug(12, 13); //rx,tx
+#endif
 
 byte button_pins[] = {PIN_BTN_A, PIN_BTN_B, PIN_BTN_C,
                         PIN_BTN_D, PIN_BTN_E, PIN_BTN_F};
@@ -125,8 +130,8 @@ void handleButton(int i) {
         i = BUTTON_COUNT;
 
 #ifdef SERIALDBG
-        Serial.print("backlight switched to ");
-        Serial.println(backlight);
+        Debug.print("backlight switched to ");
+        Debug.println(backlight);
 #endif
     }
 
@@ -136,21 +141,21 @@ void handleButton(int i) {
         buttons_suppressed[i] = true;
 
 #ifdef SERIALDBG
-    Serial.print("long-press ");
-    Serial.println(i);
+        Debug.print("long-press ");
+        Debug.println(i);
 #endif
 
     } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
         sendButtonKey(i);
-        pixels.setPixelColor(i, pixels.Color(0, 0, 30));
+        pixels.setPixelColor(i, pixels.Color(20, 0, 20));
 
 #ifdef SERIALDBG
-    Serial.print("press ");
-    Serial.println(i);
+        Debug.print("press ");
+        Debug.println(i);
 #endif
 
     } else if (buttons[i].isPressed()) {
-        pixels.setPixelColor(i, pixels.Color(0, 20, 0));
+        pixels.setPixelColor(i, pixels.Color(20, 0, 0));
 
     } else if (buttons_lit[i]) {
         pixels.setPixelColor(i, colors[button_colors[i]]);
@@ -190,21 +195,21 @@ uint32_t payloadToColor(String payload_str, uint32_t current) {
     payload_str.trim();
     if (payload_str.length() == 1) {
         int index = payload_str.toInt() % 7;
-
         return colors[index];
+
     } else if (payload_str.startsWith("#")) {
         // hex color
         return pixels.Color(
                 hexToInt(payload_str.substring(1, 2)),
                 hexToInt(payload_str.substring(3, 2)),
                 hexToInt(payload_str.substring(5, 2)));
+
     } else if (payload_str.startsWith("(")) {
         // int color
         return pixels.Color(
                 payload_str.substring(1, 3).toInt(),
                 payload_str.substring(5, 3).toInt(),
                 payload_str.substring(9, 3).toInt());
-
     }
 
     return current;
@@ -220,16 +225,16 @@ String payloadToString(byte* payload, unsigned int length) {
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
 #ifdef SERIALDBG
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.print("] ");
+    Debug.print("Message arrived [");
+    Debug.print(topic);
+    Debug.print("] ");
 #endif
 
     String topic_str = String(topic);
     String payload_str = payloadToString(payload, length);
 
 #ifdef SERIALDBG
-    Serial.println(payload_str);
+    Debug.println(payload_str);
 #endif
 
     if (topic_str == "shorty/command/backlight/power") {
@@ -245,14 +250,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         }
     }
 }
-#endif
+#endif // WIFI_ESP
 
 
 void setup() {
 #ifdef SERIALDBG
-    Serial.begin(9600);
+    Debug.begin(9600);
 #endif
     for (int i = 0; i < BUTTON_COUNT; i++) {
+        pinMode(button_pins[i], INPUT_PULLUP);
         buttons[i].begin();
     }
 

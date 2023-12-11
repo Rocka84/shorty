@@ -1,7 +1,7 @@
 #define PIN_ESP_TX  14
 #define PIN_ESP_RX  15
 
-#define SERIALDBG
+// #define SERIALDBG
 
 #include <PubSubClient.h>
 #include <WiFiEspAT.h>
@@ -15,6 +15,11 @@ SoftwareSerial Serial1(PIN_ESP_RX, PIN_ESP_TX);
 #endif
 
 WiFiClient espClient;
+
+#ifdef SERIALDBG
+#include <SoftwareSerial.h>
+SoftwareSerial Debug2 = SoftwareSerial(12, 13);
+#endif
 
 class MqttWrapper {
     PubSubClient client;
@@ -32,34 +37,39 @@ class MqttWrapper {
         WiFi.init(Serial1);
 
         if (WiFi.status() == WL_NO_MODULE) {
-            Serial.println();
-            Serial.println("Communication with WiFi module failed!");
-            return;
+#ifdef SERIALDBG
+            Debug2.println();
+            Debug2.println("Communication with WiFi module failed!");
+#endif
+            while(true);
         }
-        #ifdef SERIALDBG
-            Serial.println("connecting wifi");
-        #endif
+#ifdef SERIALDBG
+        Debug2.println("connecting wifi");
+#endif
 
         // WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, password);
 
         while (WiFi.status() != WL_CONNECTED) {
             delay(500);
-            #ifdef SERIALDBG
-                Serial.print(".");
-            #endif
+#ifdef SERIALDBG
+            Debug2.print(".");
+#endif
         }
 
-        #ifdef SERIALDBG
-            Serial.println(" connected");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
-        #endif
+#ifdef SERIALDBG
+        Debug2.println(" connected");
+        Debug2.print("IP address: ");
+        Debug2.println(WiFi.localIP());
+#endif
         delay(1500);
     }
 
     public:
         MqttWrapper(const char* ssid, const char* password, const char* broker, uint16_t port, String base_topic) : ssid(ssid), password(password), base_topic(base_topic) {
+#ifdef SERIALDBG
+        Debug2.println("MqttWrapper constructed");
+#endif
             client = PubSubClient(espClient);
             client.setServer(broker, port);
         }
@@ -71,8 +81,8 @@ class MqttWrapper {
                     return;
                 }
                 #ifdef SERIALDBG
-                    Serial.print("mqtt connection failed: ");
-                    Serial.println(client.state());
+                    Debug2.print("mqtt connection failed: ");
+                    Debug2.println(client.state());
                 #endif
 
                 delay(50);
@@ -82,7 +92,7 @@ class MqttWrapper {
 
         int publish(String topic, String payload, bool retain) {
             #ifdef SERIALDBG
-                Serial.println("publish " + base_topic + "/" + topic + " " + payload);
+                Debug2.println("publish " + base_topic + "/" + topic + " " + payload);
             #endif
             connect();
 

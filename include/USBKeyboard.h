@@ -19,6 +19,7 @@ class USBKeyboard {
   void init () {
     // We will talk to atmega8u2 using 9600 bps
     Serial.begin(9600);
+    _releaseKeys();
   }
 
 
@@ -26,9 +27,12 @@ class USBKeyboard {
     sendKeyStroke(keyStroke, 0);
   }
 
-  void sendKeyStroke(byte keyStroke, byte modifiers) {
+  void _releaseKeys() {
     uint8_t keyNone[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    Serial.write(keyNone, 8);    // Release Key
+  }
 
+  void sendKeyStroke(byte keyStroke, byte modifiers) {
     Serial.write(modifiers);     // Modifier Keys
     Serial.write(0);          // Reserved
     Serial.write(keyStroke);     // Keycode 1
@@ -38,14 +42,12 @@ class USBKeyboard {
     Serial.write(0);          // Keycode 5
     Serial.write(0);          // Keycode 6
 
-    Serial.write(keyNone, 8);    // Release Key
+    _releaseKeys();
   }
 
   uint8_t readLedStatus() {
-    uint8_t keyNone[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
     uint8_t ledStatus;
-
-    Serial.write(keyNone, 8);    // Release Key
+    _releaseKeys();
     while (Serial.available() > 0) {
       ledStatus = Serial.read();
     }

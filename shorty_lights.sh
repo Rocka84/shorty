@@ -52,8 +52,23 @@ function findDevicePath() {
     fi
 }
 
+function ensureAccess() {
+    [ -n "$access" ] && return
+    rights="$(stat -c %A ${device_path/LED/kana})"
+    if [ "${rights: -2:1}" == "w" ]; then
+        access=1
+        return
+    fi
+    for led in kana numlock capslock scrolllock compose; do
+        sudo chmod a+w ${device_path/LED/$led}
+    done
+    access=1
+}
+
 function setLed() {
-    echo "$2" | sudo tee ${device_path/LED/$1} > /dev/null
+    # echo "$2" | sudo tee ${device_path/LED/$1} > /dev/null
+    ensureAccess
+    echo "$2" > ${device_path/LED/$1}
 }
 
 function latch() {
