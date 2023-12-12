@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <USBKeyboard.h>
 #include <JC_Button.h>
+#include <Encoder.h>
 
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
@@ -26,6 +27,9 @@
 #define PIN_BTN_E   6
 #define PIN_BTN_F   7
 
+#define PIN_ROTARY_CLK 11
+#define PIN_ROTARY_DT 10
+
 #define PIN_NEOPIXELS 9
 
 #ifdef SERIALDBG
@@ -47,7 +51,14 @@ Button buttons[] = { Button(PIN_BTN_A), Button(PIN_BTN_B), Button(PIN_BTN_C),
 bool buttons_suppressed[] = { false, false, false, false, false, false };
 bool buttons_lit[] = { false, false, false, false, false, false };
 
-Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+Encoder rotary(PIN_ROTARY_DT, PIN_ROTARY_CLK);
+
+int rotary_pos=0;
+int rotary_key_cw = KEY_VOLUME_UP;
+int rotary_key_ccw = KEY_VOLUME_DOWN;
+
+// Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels(8, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
 bool backlight = false;
 uint32_t color_default = pixels.Color(3, 3, 3);
@@ -82,6 +93,10 @@ void handleLedStatus() {
         return;
     }
 
+
+#ifdef SERIALDBG
+    Debug.println("led command received");
+#endif
     led_latch_handled = true;
     bool target_state = ((led_status >> 3 & 1) == 1); // bit 4
     int data = led_status & 7; // bits 1-3
@@ -160,11 +175,19 @@ void handleButton(int i) {
     } else if (buttons_lit[i]) {
         pixels.setPixelColor(i, colors[button_colors[i]]);
 
+#ifdef SERIALDBG
+        if (i==5) {
+            Debug.print("buttons_lit ");
+            Debug.println(i);
+        }
+#endif
+
     } else if(backlight) {
         pixels.setPixelColor(i, color_default);
 
     } else {
         pixels.setPixelColor(i, color_off);
+
     }
 
     if (buttons[i].wasReleased()) {
@@ -273,18 +296,43 @@ void setup() {
 #endif
 }
 
+int cnt=0;
 void loop() {
     handleLedStatus();
 #ifdef WIFI_ESP
     mqtt.loop();
 #endif
 
-    for (int i = 0; i < BUTTON_COUNT; i++) {
-        handleButton(i);
+    int rotary_pos_new = rotary.read();
+    if (rotary_pos_new != rotary_pos) {
+#ifdef SERIALDBG
+        Debug.print("rotary move ");
+        Debug.print(rotary_pos_new);
+        if (rotary_pos_new > rotary_pos) {
+            Debug.println(" +");
+        } else {
+            Debug.println(" -");
+        }
+#endif
+        if (rotary_pos_new > rotary_pos) {
+            Keyboard.sendKeyStroke(rotary_key_cw);
+        } else {
+            Keyboard.sendKeyStroke(rotary_key_ccw);
+        }
+
+        rotary_pos = rotary_pos_new;
     }
 
-    pixels.show();
+    if (++cnt>10) {
+        cnt=0;
 
-    delay(50);
+        for (int i = 0; i < BUTTON_COUNT; i++) {
+            handleButton(i);
+        }
+
+        pixels.show();
+    }
+
+    // delay(50);
 }
 
