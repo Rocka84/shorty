@@ -9,15 +9,6 @@
 #endif
 
 // #define SERIALDBG
-// #define WIFI_ESP
-
-#ifdef WIFI_ESP
-#include <MqttWrapper.h>
-#include <secrets.h>
-
-#define PIN_ESP_TX  14
-#define PIN_ESP_RX  15
-#endif
 
 #define BUTTON_COUNT 6
 #define PIN_BTN_A   2
@@ -76,10 +67,6 @@ uint32_t colors[] = {
 };
 
 bool led_latch_handled = false;
-
-#ifdef WIFI_ESP
-MqttWrapper mqtt(WIFI_SSID, WIFI_PASSWORD, MQTT_HOST, 1883, "shorty");
-#endif
 
 void handleLedStatus() {
     uint8_t led_status = Keyboard.readLedStatus();
@@ -195,87 +182,6 @@ void handleButton(int i) {
     }
 }
 
-#ifdef WIFI_ESP
-bool payloadToBool(String payload_str, bool current) {
-    if (payload_str == "off" || payload_str == "OFF" || payload_str == "0") {
-        return false;
-    } else if (payload_str == "on" || payload_str == "ON" || payload_str == "1") {
-        return true;
-    } else if (payload_str == "toggle" || payload_str == "TOGGLE" || payload_str == "2") {
-        return !current;
-    }
-
-    return current;
-}
-
-int hexToInt(String hex){
-    char c[hex.length() + 1];
-    hex.toCharArray(c, hex.length() + 1);
-    return (int) strtol(c, NULL, 16);
-}
-
-uint32_t payloadToColor(String payload_str, uint32_t current) {
-    payload_str.trim();
-    if (payload_str.length() == 1) {
-        int index = payload_str.toInt() % 7;
-        return colors[index];
-
-    } else if (payload_str.startsWith("#")) {
-        // hex color
-        return pixels.Color(
-                hexToInt(payload_str.substring(1, 2)),
-                hexToInt(payload_str.substring(3, 2)),
-                hexToInt(payload_str.substring(5, 2)));
-
-    } else if (payload_str.startsWith("(")) {
-        // int color
-        return pixels.Color(
-                payload_str.substring(1, 3).toInt(),
-                payload_str.substring(5, 3).toInt(),
-                payload_str.substring(9, 3).toInt());
-    }
-
-    return current;
-}
-
-String payloadToString(byte* payload, unsigned int length) {
-    char payload_chars[length];
-    for (unsigned int i = 0; i < length; i++) {
-        payload_chars[i] = (char) payload[i];
-    }
-    return String(payload_chars);
-}
-
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-#ifdef SERIALDBG
-    Debug.print("Message arrived [");
-    Debug.print(topic);
-    Debug.print("] ");
-#endif
-
-    String topic_str = String(topic);
-    String payload_str = payloadToString(payload, length);
-
-#ifdef SERIALDBG
-    Debug.println(payload_str);
-#endif
-
-    if (topic_str == "shorty/command/backlight/power") {
-        backlight = payloadToBool(payload_str, backlight);
-
-    } else if (topic_str.startsWith("shorty/command/led")) {
-        int index = topic_str.substring(19, 1).toInt();
-
-        if (topic_str.endsWith("/power")) {
-            buttons_lit[index] = payloadToBool(payload_str, buttons_lit[index]);
-        } else if (topic_str.endsWith("/color")) {
-            button_colors[index] = payloadToColor(payload_str, button_colors[index]);
-        }
-    }
-}
-#endif // WIFI_ESP
-
-
 void setup() {
 #ifdef SERIALDBG
     Debug.begin(9600);
@@ -288,20 +194,11 @@ void setup() {
     Keyboard.init();
     pixels.begin();
     pixels.clear();
-
-#ifdef WIFI_ESP
-    mqtt.connect();
-    mqtt.setCallback(mqttCallback);
-    mqtt.subscribe("shorty/#");
-#endif
 }
 
 int cnt=0;
 void loop() {
     handleLedStatus();
-#ifdef WIFI_ESP
-    mqtt.loop();
-#endif
 
     int rotary_pos_new = rotary.read();
     if (rotary_pos_new != rotary_pos) {
