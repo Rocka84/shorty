@@ -11,12 +11,12 @@
 // #define SERIALDBG
 
 #define BUTTON_COUNT 6
-#define PIN_BTN_A   2
+#define PIN_BTN_A   4
 #define PIN_BTN_B   3
-#define PIN_BTN_C   4
-#define PIN_BTN_D   5
+#define PIN_BTN_C   2
+#define PIN_BTN_D   7
 #define PIN_BTN_E   6
-#define PIN_BTN_F   7
+#define PIN_BTN_F   5
 
 #define PIN_ROTARY_CLK 11
 #define PIN_ROTARY_DT 10
@@ -55,6 +55,7 @@ bool backlight = false;
 uint32_t color_default = pixels.Color(3, 3, 3);
 uint32_t color_off = pixels.Color(0, 0, 0);
 
+int button_pixels[] = { 0, 1, 2, 5, 4, 3 };
 int button_colors[] = { 0, 0, 0, 0, 0, 0 };
 uint32_t colors[] = {
     pixels.Color(0, 0, 30),
@@ -122,6 +123,10 @@ void sendButtonKey(int index){
     Keyboard.sendKeyStroke(button_keys[index]);
 }
 
+void setPixelColor(int button, uint32_t color) {
+        pixels.setPixelColor(button_pixels[button], color);
+}
+
 void handleButton(int i) {
     buttons[i].read();
 
@@ -139,7 +144,7 @@ void handleButton(int i) {
 
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
         sendButtonKey(i + BUTTON_COUNT);
-        pixels.setPixelColor(i, pixels.Color(0, 20, 20));
+        setPixelColor(i, pixels.Color(0, 20, 20));
         buttons_suppressed[i] = true;
 
 #ifdef SERIALDBG
@@ -149,7 +154,7 @@ void handleButton(int i) {
 
     } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
         sendButtonKey(i);
-        pixels.setPixelColor(i, pixels.Color(20, 0, 20));
+        setPixelColor(i, pixels.Color(20, 0, 20));
 
 #ifdef SERIALDBG
         Debug.print("press ");
@@ -157,10 +162,10 @@ void handleButton(int i) {
 #endif
 
     } else if (buttons[i].isPressed()) {
-        pixels.setPixelColor(i, pixels.Color(20, 0, 0));
+        setPixelColor(i, pixels.Color(20, 0, 0));
 
     } else if (buttons_lit[i]) {
-        pixels.setPixelColor(i, colors[button_colors[i]]);
+        setPixelColor(i, colors[button_colors[i]]);
 
 #ifdef SERIALDBG
         if (i==5) {
@@ -170,10 +175,10 @@ void handleButton(int i) {
 #endif
 
     } else if(backlight) {
-        pixels.setPixelColor(i, color_default);
+        setPixelColor(i, color_default);
 
     } else {
-        pixels.setPixelColor(i, color_off);
+        setPixelColor(i, color_off);
 
     }
 
@@ -196,19 +201,19 @@ void setup() {
     pixels.clear();
 }
 
-int cnt=0;
+int loop_cnt=0;
 void loop() {
     handleLedStatus();
 
     int rotary_pos_new = rotary.read();
     if (rotary_pos_new != rotary_pos) {
 #ifdef SERIALDBG
-        Debug.print("rotary move ");
+        Debug.print("rotary ");
         Debug.print(rotary_pos_new);
         if (rotary_pos_new > rotary_pos) {
-            Debug.println(" +");
+            Debug.println(" >>");
         } else {
-            Debug.println(" -");
+            Debug.println(" <<");
         }
 #endif
         if (rotary_pos_new > rotary_pos) {
@@ -220,8 +225,8 @@ void loop() {
         rotary_pos = rotary_pos_new;
     }
 
-    if (++cnt>10) {
-        cnt=0;
+    if (++loop_cnt>10) {
+        loop_cnt=0;
 
         for (int i = 0; i < BUTTON_COUNT; i++) {
             handleButton(i);
