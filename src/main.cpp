@@ -2,6 +2,7 @@
 #include <USBKeyboard.h>
 #include <JC_Button.h>
 #include <Encoder.h>
+#include <math.h>
 
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
@@ -72,6 +73,39 @@ uint32_t colors[] = {
 
 bool led_latch_handled = false;
 
+
+void setPixelColor(int button, uint32_t color) {
+        pixels.setPixelColor(button_pixels[button], color);
+}
+
+bool effect_active = false;
+int effect_step = 0;
+
+//Thanks to ChatGPT for this method
+int linearToSinus(int linearValue, int x) {
+    int normalizedValue = linearValue * 1000 / x;
+    int sinValue = 1000 * sin(2 * M_PI * normalizedValue / 1000);
+    return x / 2 * sinValue / 1000 + x / 2;
+}
+
+int effect_step_max = 64;
+void handleEffect() {
+    if (!effect_active) return;
+
+    int step = effect_step;
+    for (int i=0; i < BUTTON_COUNT; i++) {
+
+        pixels.setPixelColor(i, pixels.Color(
+                    0, //linearToSinus(step, step_max/3*2) + 10,
+                    linearToSinus(step + effect_step_max, effect_step_max) + 10,
+                    linearToSinus(step + effect_step_max/2, effect_step_max) + 10
+                ));
+        step+=8;
+    }
+
+    if (++effect_step > effect_step_max) effect_step = 0;
+}
+
 void handleLedStatus() {
     uint8_t led_status = Keyboard.readLedStatus();
 
@@ -114,8 +148,9 @@ void handleLedStatus() {
                 buttons_lit[i] = false;
                 button_colors[i] = 0;
             }
+            effect_active = false;
         } else { // 0b1111
-            //@ToDo: add simple effect
+            effect_active = !effect_active;
         }
     }
 }
@@ -125,11 +160,6 @@ void sendButtonKey(int index){
 
     Keyboard.sendKeyStroke(button_keys[index]);
 }
-
-void setPixelColor(int button, uint32_t color) {
-        pixels.setPixelColor(button_pixels[button], color);
-}
-
 void handleButton(int i) {
     buttons[i].read();
 
@@ -142,6 +172,18 @@ void handleButton(int i) {
 #ifdef SERIALDBG
         Debug.print("backlight switched to ");
         Debug.println(backlight);
+#endif
+    }
+
+    if (i == 1 && buttons[1].isPressed() && buttons[4].isPressed()) {
+        effect_active = !effect_active;
+        buttons_suppressed[1] = true;
+        buttons_suppressed[4] = true;
+        i = BUTTON_COUNT;
+
+#ifdef SERIALDBG
+        Debug.print("effect_active switched to ");
+        Debug.println(effect_active);
 #endif
     }
 
@@ -169,6 +211,9 @@ void handleButton(int i) {
 
     } else if (buttons_lit[i]) {
         setPixelColor(i, colors[button_colors[i]]);
+
+    } else if(effect_active) {
+        //skip
 
     } else if(backlight) {
         setPixelColor(i, color_default);
@@ -223,6 +268,8 @@ void loop() {
 
     if (++loop_cnt>10) {
         loop_cnt=0;
+
+        handleEffect();
 
         for (int i = 0; i < BUTTON_COUNT; i++) {
             handleButton(i);
