@@ -73,9 +73,9 @@ function setLed() {
 
 function latch() {
     setLed kana "1"
-    sleep .1
+    sleep .01
     setLed kana "0"
-    sleep .1
+    sleep .01
 }
 
 function sendBits() {
@@ -131,10 +131,17 @@ while [ -n "$1" ]; do
                 echo "invalid command: '$1 $2 $3'"
                 help 2
             fi
-            state=0
-            [ "$3" == "1" ] && state=1
 
-            sendBits "$(($2 & 1))" "$(($(($2 >> 1)) & 1))" "$(($(($2 >> 2)) & 1))" "$state"
+            if [ "$3" == "0" ]; then
+                sendBits "$(($2 & 1))" "$(($(($2 >> 1)) & 1))" "$(($(($2 >> 2)) & 1))" "0"
+            elif [ "$3" == "00" ]; then
+                sendBits "$(($2 & 1))" "$(($(($2 >> 1)) & 1))" "$(($(($2 >> 2)) & 1))" "0"
+                sendBits "$(($2 & 1))" "$(($(($2 >> 1)) & 1))" "$(($(($2 >> 2)) & 1))" "0"
+            elif [ "$3" -ge 1 ]; then
+                for i in $(seq 1 "$3"); do
+                    sendBits "$(($2 & 1))" "$(($(($2 >> 1)) & 1))" "$(($(($2 >> 2)) & 1))" "1"
+                done
+            fi
             shift 2
             ;;
         "clear")

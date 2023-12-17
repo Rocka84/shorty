@@ -48,8 +48,8 @@ int rotary_pos=0;
 int rotary_key_cw = KEY_VOLUME_UP;
 int rotary_key_ccw = KEY_VOLUME_DOWN;
 
-// Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel pixels(8, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+// Adafruit_NeoPixel pixels(8, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
 bool backlight = false;
 uint32_t color_default = pixels.Color(3, 3, 3);
@@ -57,14 +57,17 @@ uint32_t color_off = pixels.Color(0, 0, 0);
 
 int button_pixels[] = { 0, 1, 2, 5, 4, 3 };
 int button_colors[] = { 0, 0, 0, 0, 0, 0 };
+
+int button_colors_count = 7;
 uint32_t colors[] = {
-    pixels.Color(0, 0, 30),
-    pixels.Color(0, 20, 20),
-    pixels.Color(0, 30, 0),
-    pixels.Color(20, 20, 0),
-    pixels.Color(30, 0, 0),
-    pixels.Color(20, 0, 20),
-    pixels.Color(12, 12, 12)
+    pixels.Color(0, 0, 20),
+    pixels.Color(0, 10, 10),
+    pixels.Color(0, 20, 0),
+    pixels.Color(10, 10, 0),
+    pixels.Color(20, 0, 0),
+    pixels.Color(10, 0, 10),
+    pixels.Color(7, 7, 7)
+        // , pixels.Color(254, 254, 254)
 };
 
 bool led_latch_handled = false;
@@ -97,7 +100,7 @@ void handleLedStatus() {
             buttons_lit[data - 1] = true;
         } else if (target_state) { // already on, next color
             button_colors[data - 1]++;
-            if (button_colors[data - 1] > 6) button_colors[data - 1] = 0;
+            if (button_colors[data - 1] > button_colors_count - 1) button_colors[data - 1] = 0;
 
         } else if (buttons_lit[data - 1]) { // turn off
             buttons_lit[data - 1] = false;
@@ -144,7 +147,7 @@ void handleButton(int i) {
 
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
         sendButtonKey(i + BUTTON_COUNT);
-        setPixelColor(i, pixels.Color(0, 20, 20));
+        setPixelColor(i, pixels.Color(10, 0, 10));
         buttons_suppressed[i] = true;
 
 #ifdef SERIALDBG
@@ -154,7 +157,7 @@ void handleButton(int i) {
 
     } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
         sendButtonKey(i);
-        setPixelColor(i, pixels.Color(20, 0, 20));
+        setPixelColor(i, pixels.Color(0, 10, 10));
 
 #ifdef SERIALDBG
         Debug.print("press ");
@@ -162,17 +165,10 @@ void handleButton(int i) {
 #endif
 
     } else if (buttons[i].isPressed()) {
-        setPixelColor(i, pixels.Color(20, 0, 0));
+        setPixelColor(i, pixels.Color(0, 0, 10));
 
     } else if (buttons_lit[i]) {
         setPixelColor(i, colors[button_colors[i]]);
-
-#ifdef SERIALDBG
-        if (i==5) {
-            Debug.print("buttons_lit ");
-            Debug.println(i);
-        }
-#endif
 
     } else if(backlight) {
         setPixelColor(i, color_default);
@@ -234,7 +230,5 @@ void loop() {
 
         pixels.show();
     }
-
-    // delay(50);
 }
 
