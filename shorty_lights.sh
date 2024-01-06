@@ -20,6 +20,8 @@
 # LED_CAPSLOCK -----/|
 # LED_NUMLOCK -------/
 
+device_vid="03eb"
+device_pid="2042"
 device_path=
 
 function help() {
@@ -37,8 +39,9 @@ END
 }
 
 findDeviceNumber(){ # stackoverflow to the rescue!
-    v=${1%:*}; p=${1#*:}  # split vid:pid into 2 vars
-    v=${v#${v%%[!0]*}}; p=${p#${p%%[!0]*}}  # strip leading zeros
+    v=${1#${1%%[!0]*}}  # strip leading zeros
+    p=${2#${2%%[!0]*}}
+
     grep -il "^PRODUCT=$v/$p" /sys/bus/usb/devices/*:*/uevent |
     sed s,uevent,, |
     xargs -r grep -r '^DEVNAME=' --include uevent |
@@ -46,7 +49,7 @@ findDeviceNumber(){ # stackoverflow to the rescue!
 }
 
 function findDevicePath() {
-    device_number="$(findDeviceNumber 03eb:2042)"
+    device_number="$(findDeviceNumber "$device_vid" "$device_pid")"
     if [ -n "$device_number" ]; then
         device_path="/sys/class/leds/input$device_number::LED/brightness"
     fi
@@ -54,13 +57,18 @@ function findDevicePath() {
 
 function ensureAccess() {
     [ -n "$access" ] && return
-    rights="$(stat -c %A ${device_path/LED/kana})"
-    if [ "${rights: -2:1}" == "w" ]; then
-        access=1
-        return
+    if [ "$(id -u)" == "0" ]; then
+        sudo=
+    else
+        sudo="sudo"
+        rights="$(stat -c %A ${device_path/LED/kana})"
+        if [ "${rights: -2:1}" == "w" ]; then
+            access=1
+            return
+        fi
     fi
     for led in kana numlock capslock scrolllock compose; do
-        sudo chmod a+w ${device_path/LED/$led}
+        $sudo chmod a+w ${device_path/LED/$led}
     done
     access=1
 }
@@ -81,7 +89,7 @@ function latch() {
 function sendBits() {
     [ -z "$device_path" ] && findDevicePath
     if [ -z "$device_path" ]; then
-        echo "device not found"
+        echo "shorty not found"
         exit 1
     fi
 
@@ -151,6 +159,51 @@ while [ -n "$1" ]; do
         "effect")
             # 0b1111 / 15
             sendBits 1 1 1 1
+            ;;
+        "ensureAccess")
+            date >> "/tmp/foo"
+            id -u >> /tmp/foo
+            findDevicePath
+            ensureAccess
+            ;;
+        "install")
+            if [ "$(id -u)" != "0" ]; then
+                echo "please run as root"
+                exit 1
+            fi
+            if [ ! -x "/usr/local/bin/shorty_lights" ]; then
+                cp "$(realpath "$0")" "/usr/local/bin/shorty_lights"
+                echo "$(realpath "$0") copied to /usr/local/bin/"
+            fi
+            if [ ! -f "/etc/udev/rules.d/00-shorty.rules" ]; then
+                rules="$(dirname "$0")/00-shorty.rules"
+                if [ -f "$rules" ]; then
+                    cp "$(dirname "$0")/00-shorty.rules" "/etc/udev/rules.d/00-shorty.rules"
+                    udevadm control --reload-rules
+                    udevadm trigger
+                    echo "udev rules installed"
+                else
+                    echo "udev rules file not found"
+                fi
+            fi
+            ;;
+        "debug")
+            echo "device: $device_vid:$device_pid"
+            findDevicePath
+            if [ -z "$device_path" ]; then
+                echo "shorty not found"
+                exit 1
+            fi
+            echo -n "device_path: "
+            echo $device_path
+
+            echo -n "write access: "
+            rights="$(stat -c %A ${device_path/LED/kana})"
+            if [ "${rights: -2:1}" == "w" ]; then
+                echo "yes"
+            else
+                echo "no"
+            fi
             ;;
         *)
             echo "unknown command '$1'"
