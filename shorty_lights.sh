@@ -161,8 +161,6 @@ while [ -n "$1" ]; do
             sendBits 1 1 1 1
             ;;
         "ensureAccess")
-            date >> "/tmp/foo"
-            id -u >> /tmp/foo
             findDevicePath
             ensureAccess
             ;;
