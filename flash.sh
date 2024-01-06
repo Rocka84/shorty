@@ -24,9 +24,14 @@ while [ -n "$1" ]; do
             to_keyboard=1
             flash_code=
             ;;
-        "-F"|"full")
+        "-f"|"full")
             to_arduino=1
             flash_code=1
+            to_keyboard=1
+            ;;
+        "-F"|"Full")
+            to_arduino=1
+            flash_code=
             to_keyboard=1
             ;;
     esac
