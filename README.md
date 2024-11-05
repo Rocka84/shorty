@@ -31,7 +31,7 @@ What I used:
 * neopixel strip cut to single segments
 * rotary encoder
 * micro-usb board
-* [3d printed parts](https://cad.onshape.com/documents/d508c5bf2328906736006f78/w/f44fa97748e9fe6ff14aafbd/e/1209bba8c7ca4193ff877ee7?renderMode=0&uiState=6599d43a8c26f72423a10e08)
+* [3d printed parts](https://cad.onshape.com/documents/d508c5bf2328906736006f78/w/f44fa97748e9fe6ff14aafbd/e/1209bba8c7ca4193ff877ee7?renderMode=0&uiState=672a42739f1d8e3f5012915f)
 
 I createad 5 buttons from a tactile switch, a neopixel and some 3d printed parts each.
 Every button can be lit individually in different colors.
