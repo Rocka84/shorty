@@ -8,6 +8,16 @@ to_arduino=
 to_keyboard=
 flash_code=1
 
+function showHelp() {
+    cat <<-EOD
+  -a | arduino    flash arduino firmware (if needed)
+  -A | Arduino    flash arduino firmware and stop
+  -k | keyboard   flash keyboard firmware in the end
+  -K | Keyboard   only flash keyboard firmware
+  -F | full       flash arduino firmware, then flash code, then flash keyboard firmware
+EOD
+}
+
 while [ -n "$1" ]; do
     case "$1" in
         "-a"|"arduino")
@@ -22,17 +32,17 @@ while [ -n "$1" ]; do
             ;;
         "-K"|"Keyboard")
             to_keyboard=1
+            to_arduino=
             flash_code=
             ;;
-        "-f"|"full")
+        "-F"|"full")
             to_arduino=1
             flash_code=1
             to_keyboard=1
             ;;
-        "-F"|"Full")
-            to_arduino=1
-            flash_code=
-            to_keyboard=1
+        *)
+            showHelp
+            exit 0
             ;;
     esac
     shift
@@ -60,7 +70,7 @@ elif lsusb | grep -q  "LUFA Keyboard"; then
     to_keyboard=
 fi
 
-if [ -z "$to_arduino" ] && ! lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
+if [ -z "$to_arduino" ] && [ "$flash_code"=="1" ] && ! lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
     to_arduino=1
 fi
 
@@ -68,9 +78,12 @@ if [ -n "$to_arduino" ] && lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
     to_arduino=
 fi
 
+to_arduino=
+
 if [ -n "$to_arduino" ]; then
     waitForDFU
 
+    echo sudo "$dfu_prog" "$model" erase
     sudo "$dfu_prog" "$model" erase
     sudo "$dfu_prog" "$model" flash fw/Arduino-usbserial-uno.hex
 
@@ -79,7 +92,7 @@ if [ -n "$to_arduino" ]; then
         exit 1
     fi
 
-    echo "Unplug your Arduino and plug it back in and press enter."
+    echo "Unplug your Arduino, plug it back in and press enter."
     read
 fi
 
