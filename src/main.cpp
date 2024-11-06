@@ -247,8 +247,9 @@ void loop() {
     handleLedStatus();
 
     int rotary_pos_new = rotary.read();
-    if (rotary_pos_new != rotary_pos) {
+    if (rotary_pos_new != rotary_pos and rotary_pos_new % 4 == 0) {
 #ifdef SERIALDBG
+        Debug.println();
         Debug.print("rotary ");
         Debug.print(rotary_pos_new);
         if (rotary_pos_new > rotary_pos) {
