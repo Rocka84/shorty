@@ -5,6 +5,8 @@
 #include <math.h>
 
 #include <Adafruit_NeoPixel.h>
+#include <WS2812FX.h>
+
 #ifdef __AVR__
 #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
@@ -25,8 +27,9 @@
 #define PIN_NEOPIXELS 9
 
 #ifdef SERIALDBG
-#include <SoftwareSerial.h>
-SoftwareSerial Debug(12, 13); //rx,tx
+#define Debug Serial
+// #include <SoftwareSerial.h>
+// SoftwareSerial Debug(12, 13); //rx,tx
 #endif
 
 byte button_pins[] = {PIN_BTN_A, PIN_BTN_B, PIN_BTN_C,
@@ -52,6 +55,9 @@ int rotary_key_ccw = KEY_VOLUME_DOWN;
 Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 // Adafruit_NeoPixel pixels(8, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
+WS2812FX pixels_effect = WS2812FX(BUTTON_COUNT - 1, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+int effect_mode = FX_MODE_BREATH;
+
 bool backlight = false;
 uint32_t color_default = pixels.Color(3, 3, 3);
 uint32_t color_off = pixels.Color(0, 0, 0);
@@ -75,39 +81,46 @@ bool led_latch_handled = false;
 
 
 void setPixelColor(int button, uint32_t color) {
-        pixels.setPixelColor(button_pixels[button], color);
+    pixels.setPixelColor(button_pixels[button], color);
 }
 
 bool effect_active = false;
-int effect_step = 0;
 
-//Thanks to ChatGPT for this method
-int linearToSinus(int linearValue, int x) {
-    int normalizedValue = linearValue * 1000 / x;
-    int sinValue = 1000 * sin(2 * M_PI * normalizedValue / 1000);
-    return x / 2 * sinValue / 1000 + x / 2;
+void setupEffects() {
+    pixels_effect.init();
+    pixels_effect.setColor(CYAN);
+    pixels_effect.setBrightness(50);
+    pixels_effect.setSpeed(3000);
+    // pixels_effect.setMode(FX_MODE_BREATH);
+    pixels_effect.setMode(effect_mode);
 }
 
-int effect_step_max = 64;
-void handleEffect() {
-    if (!effect_active) return;
-
-    int step = effect_step;
-    for (int i=0; i < BUTTON_COUNT; i++) {
-
-        pixels.setPixelColor(i, pixels.Color(
-                    0, //linearToSinus(step, step_max/3*2) + 10,
-                    linearToSinus(step + effect_step_max, effect_step_max) + 10,
-                    linearToSinus(step + effect_step_max/2, effect_step_max) + 10
-                ));
-        step+=8;
+void startEffect() {
+    if (effect_active) {
+        effect_mode = (effect_mode + 1) % (pixels_effect.getModeCount() - 8);
+        // pixels_effect.setMode(effect_mode);
+#ifdef SERIALDBG
+        Debug.print("effect mode "); Debug.print(effect_mode); Debug.print(" "); Debug.println(pixels_effect.getModeName(effect_mode));
+#endif
+        // return;
     }
+    effect_active = true;
+    pixels_effect.setMode(effect_mode);
+    pixels_effect.start();
+}
 
-    if (++effect_step > effect_step_max) effect_step = 0;
+void stopEffect() {
+    if (!effect_active) return;
+    effect_active = false;
+    pixels_effect.stop();
 }
 
 void handleLedStatus() {
+#ifdef SERIALDBG
+    uint8_t led_status = 0;
+#else
     uint8_t led_status = Keyboard.readLedStatus();
+#endif
 
     int latch = led_status >> 4; // bit 5
     if (latch == 1 && led_latch_handled) {
@@ -148,44 +161,67 @@ void handleLedStatus() {
                 buttons_lit[i] = false;
                 button_colors[i] = 0;
             }
-            effect_active = false;
+            stopEffect();
         } else { // 0b1111
             effect_active = !effect_active;
+            if (effect_active) {
+                startEffect();
+            } else {
+                stopEffect();
+            }
         }
     }
 }
 
 void sendButtonKey(int index){
+// #ifdef SERIALDBG
+//     return;
+// #endif
+
     if (button_keys[index] == 0) return;
 
     Keyboard.sendKeyStroke(button_keys[index]);
 }
-void handleButton(int i) {
-    buttons[i].read();
 
-    if (i == 0 && buttons[0].isPressed() && buttons[BUTTON_COUNT-1].isPressed()) {
+bool handleButtonCombos() {
+    if (buttons[3].isPressed() && buttons[2].wasReleased()) {
         backlight = !backlight;
-        buttons_suppressed[0] = true;
-        buttons_suppressed[BUTTON_COUNT-1] = true;
-        i = BUTTON_COUNT;
+        buttons_suppressed[3] = true;
+        buttons_suppressed[2] = true;
 
 #ifdef SERIALDBG
-        Debug.print("backlight switched to ");
-        Debug.println(backlight);
+        Debug.print("backlight switched "); Debug.println(backlight?"on":"off");
 #endif
+        return true;
     }
 
-    if (i == 1 && buttons[1].isPressed() && buttons[4].isPressed()) {
-        effect_active = !effect_active;
-        buttons_suppressed[1] = true;
+    if (buttons[3].isPressed() && buttons[5].wasReleased()) {
+        startEffect();
+        buttons_suppressed[3] = true;
+        buttons_suppressed[5] = true;
+
+#ifdef SERIALDBG
+        Debug.println("effect switched on");
+#endif
+        return true;
+    }
+
+    if (buttons[3].isPressed() && buttons[4].wasReleased()) {
+        stopEffect();
+        buttons_suppressed[3] = true;
         buttons_suppressed[4] = true;
-        i = BUTTON_COUNT;
 
 #ifdef SERIALDBG
-        Debug.print("effect_active switched to ");
-        Debug.println(effect_active);
+        Debug.println("effect switched off");
 #endif
+        return true;
     }
+
+    return false;
+}
+
+void handleButton(int i) {
+    // buttons[i].read();
 
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
         sendButtonKey(i + BUTTON_COUNT);
@@ -193,8 +229,7 @@ void handleButton(int i) {
         buttons_suppressed[i] = true;
 
 #ifdef SERIALDBG
-        Debug.print("long-press ");
-        Debug.println(i);
+        Debug.print("long-press "); Debug.println(i);
 #endif
 
     } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
@@ -202,8 +237,7 @@ void handleButton(int i) {
         setPixelColor(i, pixels.Color(0, 10, 10));
 
 #ifdef SERIALDBG
-        Debug.print("press ");
-        Debug.println(i);
+        Debug.print("press "); Debug.println(i);
 #endif
 
     } else if (buttons[i].isPressed()) {
@@ -228,6 +262,38 @@ void handleButton(int i) {
     }
 }
 
+void handleButtons() {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        buttons[i].read();
+    }
+
+    if (handleButtonCombos()){
+        return;
+    }
+
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        handleButton(i);
+    }
+}
+
+void handleRotary() {
+    int rotary_pos_new = rotary.read();
+    if (rotary_pos_new != rotary_pos && rotary_pos_new % 4 == 0) {
+#ifdef SERIALDBG
+        Debug.println(); Debug.print("rotary "); Debug.print(rotary_pos_new);
+        if (rotary_pos_new > rotary_pos) Debug.println(" >>");
+        else Debug.println(" <<");
+#endif
+        if (rotary_pos_new > rotary_pos) {
+            Keyboard.sendKeyStroke(rotary_key_cw);
+        } else {
+            Keyboard.sendKeyStroke(rotary_key_ccw);
+        }
+
+        rotary_pos = rotary_pos_new;
+    }
+}
+
 void setup() {
 #ifdef SERIALDBG
     Debug.begin(9600);
@@ -240,43 +306,25 @@ void setup() {
     Keyboard.init();
     pixels.begin();
     pixels.clear();
+    setupEffects();
+    // startEffect();
 }
 
 int loop_cnt=0;
 void loop() {
     handleLedStatus();
 
-    int rotary_pos_new = rotary.read();
-    if (rotary_pos_new != rotary_pos and rotary_pos_new % 4 == 0) {
-#ifdef SERIALDBG
-        Debug.println();
-        Debug.print("rotary ");
-        Debug.print(rotary_pos_new);
-        if (rotary_pos_new > rotary_pos) {
-            Debug.println(" >>");
-        } else {
-            Debug.println(" <<");
-        }
-#endif
-        if (rotary_pos_new > rotary_pos) {
-            Keyboard.sendKeyStroke(rotary_key_cw);
-        } else {
-            Keyboard.sendKeyStroke(rotary_key_ccw);
-        }
+    handleRotary();
 
-        rotary_pos = rotary_pos_new;
-    }
+    // if (++loop_cnt>10000) {
+    //     loop_cnt=0;
 
-    if (++loop_cnt>10) {
-        loop_cnt=0;
+        handleButtons();
 
-        handleEffect();
+        if (effect_active) pixels_effect.service();
+        else pixels.show();
+    // }
+    delay(5);
 
-        for (int i = 0; i < BUTTON_COUNT; i++) {
-            handleButton(i);
-        }
-
-        pixels.show();
-    }
 }
 
