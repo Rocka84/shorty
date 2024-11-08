@@ -57,9 +57,11 @@ Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
 WS2812FX pixels_effect = WS2812FX(BUTTON_COUNT - 1, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 int effect_mode = FX_MODE_BREATH;
+int effect_color = 0;
+uint32_t effect_speed = 3000;
 
 bool backlight = false;
-uint32_t color_default = pixels.Color(3, 3, 3);
+uint32_t color_default = pixels.Color(70, 70, 70);
 uint32_t color_off = pixels.Color(0, 0, 0);
 
 int button_pixels[] = { 0, 1, 2, 5, 4, 3 };
@@ -67,14 +69,13 @@ int button_colors[] = { 0, 0, 0, 0, 0, 0 };
 
 int button_colors_count = 7;
 uint32_t colors[] = {
-    pixels.Color(0, 0, 20),
-    pixels.Color(0, 10, 10),
-    pixels.Color(0, 20, 0),
-    pixels.Color(10, 10, 0),
-    pixels.Color(20, 0, 0),
-    pixels.Color(10, 0, 10),
-    pixels.Color(7, 7, 7)
-        // , pixels.Color(254, 254, 254)
+    BLUE,
+    CYAN,
+    GREEN,
+    YELLOW,
+    RED,
+    PURPLE,
+    WHITE
 };
 
 bool led_latch_handled = false;
@@ -88,8 +89,7 @@ bool effect_active = false;
 
 void setupEffects() {
     pixels_effect.init();
-    pixels_effect.setColor(CYAN);
-    pixels_effect.setBrightness(50);
+    pixels_effect.setColor(colors[effect_color]);
     pixels_effect.setSpeed(3000);
     // pixels_effect.setMode(FX_MODE_BREATH);
     pixels_effect.setMode(effect_mode);
@@ -103,7 +103,10 @@ void startEffect() {
         Debug.print("effect mode "); Debug.print(effect_mode); Debug.print(" "); Debug.println(pixels_effect.getModeName(effect_mode));
 #endif
         // return;
+    } else {
+        pixels.setBrightness(66);
     }
+
     effect_active = true;
     pixels_effect.setMode(effect_mode);
     pixels_effect.start();
@@ -113,6 +116,7 @@ void stopEffect() {
     if (!effect_active) return;
     effect_active = false;
     pixels_effect.stop();
+    pixels.setBrightness(5);
 }
 
 void handleLedStatus() {
@@ -161,6 +165,7 @@ void handleLedStatus() {
                 buttons_lit[i] = false;
                 button_colors[i] = 0;
             }
+
             stopEffect();
         } else { // 0b1111
             effect_active = !effect_active;
@@ -184,10 +189,14 @@ void sendButtonKey(int index){
 }
 
 bool handleButtonCombos() {
-    if (buttons[3].isPressed() && buttons[2].wasReleased()) {
+    // if (buttons[2].wasReleased()){
+    //     button_colors[2] = (button_colors[2] +1) % button_colors_count;
+    //     return true;
+    // }
+
+    if (buttons[3].isPressed() && buttons[0].wasReleased()) {
         backlight = !backlight;
         buttons_suppressed[3] = true;
-        buttons_suppressed[2] = true;
 
 #ifdef SERIALDBG
         Debug.print("backlight switched "); Debug.println(backlight?"on":"off");
@@ -198,7 +207,6 @@ bool handleButtonCombos() {
     if (buttons[3].isPressed() && buttons[5].wasReleased()) {
         startEffect();
         buttons_suppressed[3] = true;
-        buttons_suppressed[5] = true;
 
 #ifdef SERIALDBG
         Debug.println("effect switched on");
@@ -209,11 +217,25 @@ bool handleButtonCombos() {
     if (buttons[3].isPressed() && buttons[4].wasReleased()) {
         stopEffect();
         buttons_suppressed[3] = true;
-        buttons_suppressed[4] = true;
 
 #ifdef SERIALDBG
         Debug.println("effect switched off");
 #endif
+        return true;
+    }
+
+    if (effect_active && buttons[3].isPressed() && buttons[2].wasReleased()) {
+        effect_color = (effect_color + 1) % button_colors_count;
+        pixels_effect.setColor(colors[effect_color]);
+        buttons_suppressed[3] = true;
+        return true;
+    }
+
+    if (effect_active && buttons[3].isPressed() && buttons[1].wasReleased()) {
+        effect_speed -= 1000;
+        if (effect_speed < 1000) effect_speed = 10000;
+        pixels_effect.setSpeed(effect_speed);
+        buttons_suppressed[3] = true;
         return true;
     }
 
@@ -225,7 +247,7 @@ void handleButton(int i) {
 
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
         sendButtonKey(i + BUTTON_COUNT);
-        setPixelColor(i, pixels.Color(10, 0, 10));
+        setPixelColor(i, PURPLE);
         buttons_suppressed[i] = true;
 
 #ifdef SERIALDBG
@@ -234,14 +256,14 @@ void handleButton(int i) {
 
     } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
         sendButtonKey(i);
-        setPixelColor(i, pixels.Color(0, 10, 10));
+        setPixelColor(i, CYAN);
 
 #ifdef SERIALDBG
         Debug.print("press "); Debug.println(i);
 #endif
 
     } else if (buttons[i].isPressed()) {
-        setPixelColor(i, pixels.Color(0, 0, 10));
+        setPixelColor(i, BLUE);
 
     } else if (buttons_lit[i]) {
         setPixelColor(i, colors[button_colors[i]]);
@@ -307,6 +329,7 @@ void setup() {
     pixels.begin();
     pixels.clear();
     setupEffects();
+    pixels.setBrightness(5);
     // startEffect();
 }
 
@@ -325,6 +348,5 @@ void loop() {
         else pixels.show();
     // }
     delay(5);
-
 }
 
