@@ -11,6 +11,7 @@
 #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
 
+// #define DEBUGLOG
 // #define SERIALDBG
 
 #define BUTTON_COUNT 6
@@ -26,10 +27,11 @@
 
 #define PIN_NEOPIXELS 9
 
-#ifdef SERIALDBG
+#if defined(DEBUGLOG) && defined(SERIALDBG)
+#include <SoftwareSerial.h>
+    SoftwareSerial Debug(12, 13); //rx,tx
+#elif defined(DEBUGLOG)
 #define Debug Serial
-// #include <SoftwareSerial.h>
-// SoftwareSerial Debug(12, 13); //rx,tx
 #endif
 
 byte button_pins[] = {PIN_BTN_A, PIN_BTN_B, PIN_BTN_C,
@@ -98,11 +100,9 @@ void setupEffects() {
 void startEffect() {
     if (effect_active) {
         effect_mode = (effect_mode + 1) % (pixels_effect.getModeCount() - 8);
-        // pixels_effect.setMode(effect_mode);
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.print("effect mode "); Debug.print(effect_mode); Debug.print(" "); Debug.println(pixels_effect.getModeName(effect_mode));
 #endif
-        // return;
     } else {
         pixels.setBrightness(66);
     }
@@ -120,7 +120,7 @@ void stopEffect() {
 }
 
 void handleLedStatus() {
-#ifdef SERIALDBG
+#if defined(DEBUGLOG) && !defined(SERIALDBG)
     uint8_t led_status = 0;
 #else
     uint8_t led_status = Keyboard.readLedStatus();
@@ -136,7 +136,7 @@ void handleLedStatus() {
     }
 
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
     Debug.println("led command received");
 #endif
     led_latch_handled = true;
@@ -179,12 +179,15 @@ void handleLedStatus() {
 }
 
 void sendButtonKey(int index){
-// #ifdef SERIALDBG
+// #ifdef DEBUGLOG
 //     return;
 // #endif
 
     if (button_keys[index] == 0) return;
 
+#if defined(DEBUGLOG) && !defined(SERIALDBG)
+    return;
+#endif
     Keyboard.sendKeyStroke(button_keys[index]);
 }
 
@@ -198,7 +201,7 @@ bool handleButtonCombos() {
         backlight = !backlight;
         buttons_suppressed[3] = true;
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.print("backlight switched "); Debug.println(backlight?"on":"off");
 #endif
         return true;
@@ -208,7 +211,7 @@ bool handleButtonCombos() {
         startEffect();
         buttons_suppressed[3] = true;
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.println("effect switched on");
 #endif
         return true;
@@ -218,7 +221,7 @@ bool handleButtonCombos() {
         stopEffect();
         buttons_suppressed[3] = true;
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.println("effect switched off");
 #endif
         return true;
@@ -250,7 +253,7 @@ void handleButton(int i) {
         setPixelColor(i, PURPLE);
         buttons_suppressed[i] = true;
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.print("long-press "); Debug.println(i);
 #endif
 
@@ -258,7 +261,7 @@ void handleButton(int i) {
         sendButtonKey(i);
         setPixelColor(i, CYAN);
 
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.print("press "); Debug.println(i);
 #endif
 
@@ -301,7 +304,7 @@ void handleButtons() {
 void handleRotary() {
     int rotary_pos_new = rotary.read();
     if (rotary_pos_new != rotary_pos && rotary_pos_new % 4 == 0) {
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
         Debug.println(); Debug.print("rotary "); Debug.print(rotary_pos_new);
         if (rotary_pos_new > rotary_pos) Debug.println(" >>");
         else Debug.println(" <<");
@@ -317,7 +320,7 @@ void handleRotary() {
 }
 
 void setup() {
-#ifdef SERIALDBG
+#ifdef DEBUGLOG
     Debug.begin(9600);
 #endif
     for (int i = 0; i < BUTTON_COUNT; i++) {
@@ -325,7 +328,9 @@ void setup() {
         buttons[i].begin();
     }
 
+#if !defined(DEBUGLOG) || defined(SERIALDBG)
     Keyboard.init();
+#endif
     pixels.begin();
     pixels.clear();
     setupEffects();
