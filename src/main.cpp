@@ -49,18 +49,12 @@ bool buttons_suppressed[] = { false, false, false, false, false, false };
 bool buttons_lit[] = { false, false, false, false, false, false };
 
 Encoder rotary(PIN_ROTARY_DT, PIN_ROTARY_CLK);
-
 int rotary_pos=0;
 int rotary_key_cw = KEY_VOLUME_UP;
 int rotary_key_ccw = KEY_VOLUME_DOWN;
 
 Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 // Adafruit_NeoPixel pixels(8, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
-
-WS2812FX pixels_effect = WS2812FX(BUTTON_COUNT - 1, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
-int effect_mode = FX_MODE_BREATH;
-int effect_color = 0;
-uint32_t effect_speed = 3000;
 
 bool backlight = false;
 uint32_t color_default = pixels.Color(70, 70, 70);
@@ -69,7 +63,13 @@ uint32_t color_off = pixels.Color(0, 0, 0);
 int button_pixels[] = { 0, 1, 2, 5, 4, 3 };
 int button_colors[] = { 0, 0, 0, 0, 0, 0 };
 
-int button_colors_count = 7;
+WS2812FX pixels_effect = WS2812FX(BUTTON_COUNT - 1, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
+bool effect_active = false;
+int effect_mode = FX_MODE_BREATH;
+int effect_color = 0;
+uint32_t effect_speed = 3000;
+
+int colors_count = 7;
 uint32_t colors[] = {
     BLUE,
     CYAN,
@@ -87,13 +87,10 @@ void setPixelColor(int button, uint32_t color) {
     pixels.setPixelColor(button_pixels[button], color);
 }
 
-bool effect_active = false;
-
 void setupEffects() {
     pixels_effect.init();
     pixels_effect.setColor(colors[effect_color]);
     pixels_effect.setSpeed(3000);
-    // pixels_effect.setMode(FX_MODE_BREATH);
     pixels_effect.setMode(effect_mode);
 }
 
@@ -116,7 +113,7 @@ void stopEffect() {
     if (!effect_active) return;
     effect_active = false;
     pixels_effect.stop();
-    pixels.setBrightness(5);
+    pixels.setBrightness(10);
 }
 
 void handleLedStatus() {
@@ -151,7 +148,7 @@ void handleLedStatus() {
             buttons_lit[data - 1] = true;
         } else if (target_state) { // already on, next color
             button_colors[data - 1]++;
-            if (button_colors[data - 1] > button_colors_count - 1) button_colors[data - 1] = 0;
+            if (button_colors[data - 1] > colors_count - 1) button_colors[data - 1] = 0;
 
         } else if (buttons_lit[data - 1]) { // turn off
             buttons_lit[data - 1] = false;
@@ -167,9 +164,9 @@ void handleLedStatus() {
             }
 
             stopEffect();
+            effect_mode = FX_MODE_BREATH;
         } else { // 0b1111
-            effect_active = !effect_active;
-            if (effect_active) {
+            if (!effect_active) {
                 startEffect();
             } else {
                 stopEffect();
@@ -192,11 +189,6 @@ void sendButtonKey(int index){
 }
 
 bool handleButtonCombos() {
-    // if (buttons[2].wasReleased()){
-    //     button_colors[2] = (button_colors[2] +1) % button_colors_count;
-    //     return true;
-    // }
-
     if (buttons[3].isPressed() && buttons[0].wasReleased()) {
         backlight = !backlight;
         buttons_suppressed[3] = true;
@@ -228,7 +220,7 @@ bool handleButtonCombos() {
     }
 
     if (effect_active && buttons[3].isPressed() && buttons[2].wasReleased()) {
-        effect_color = (effect_color + 1) % button_colors_count;
+        effect_color = (effect_color + 1) % colors_count;
         pixels_effect.setColor(colors[effect_color]);
         buttons_suppressed[3] = true;
         return true;
@@ -246,8 +238,6 @@ bool handleButtonCombos() {
 }
 
 void handleButton(int i) {
-    // buttons[i].read();
-
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
         sendButtonKey(i + BUTTON_COUNT);
         setPixelColor(i, PURPLE);
@@ -334,24 +324,19 @@ void setup() {
     pixels.begin();
     pixels.clear();
     setupEffects();
-    pixels.setBrightness(5);
+    pixels.setBrightness(10);
     // startEffect();
 }
 
 int loop_cnt=0;
 void loop() {
     handleLedStatus();
-
     handleRotary();
+    handleButtons();
 
-    // if (++loop_cnt>10000) {
-    //     loop_cnt=0;
+    if (effect_active) pixels_effect.service();
+    else pixels.show();
 
-        handleButtons();
-
-        if (effect_active) pixels_effect.service();
-        else pixels.show();
-    // }
     delay(5);
 }
 
