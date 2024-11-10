@@ -96,9 +96,10 @@ void setPixelColor(int button, uint32_t color) {
 }
 
 void flashPixel(int button, uint32_t color) {
+    if (effect_active) return;
     setPixelColor(button, color);
     pixels.show();
-    delay(100);
+    delay(80);
 }
 
 void setupEffects() {
@@ -149,7 +150,7 @@ void nextEffectColor() {
     effect_color = (effect_color + 1) % colors_count;
     pixels_effect.setColor(colors[effect_color]);
 #ifdef DEBUG_LOG
-    Debug.print("effect color "); Debug.print(effect_color); Debug.print(" "); Debug.println(colors[effect_color]);
+    Debug.print("effect color "); Debug.print(effect_color); Debug.print(" 0x"); Debug.println(colors[effect_color], HEX);
 #endif
 }
 
@@ -187,8 +188,13 @@ void handleLedStatus() {
     } else {
         return;
     }
-    // led_status = led_status | 16; //latch
-    Debug.print("serial read "); Debug.println(led_status);
+
+    Debug.print("serial read ");
+    Debug.print(led_status >> 3 & 1 ? '1' : '0');
+    Debug.print(led_status >> 2 & 1 ? '1' : '0');
+    Debug.print(led_status >> 1 & 1 ? '1' : '0');
+    Debug.print(led_status >> 0 & 1 ? '1' : '0');
+    Debug.print(" ("); Debug.print(led_status, HEX); Debug.println(")");
 
 #else
     led_status = Keyboard.readLedStatus();
@@ -260,6 +266,7 @@ void handleLedStatus() {
 
 void sendButtonKey(int index){
 #if defined(DEBUG_LOG) && !defined(DEBUG_SERIAL)
+    Debug.print("key "); Debug.println(button_keys[index]);
     return;
 #endif
     if (button_keys[index] == 0) return;
@@ -309,41 +316,26 @@ bool handleButtonCombos() {
         return true;
     }
 
-#if defined(DEBUG_LOG) && !defined(DEBUG_SERIAL)
-    if (buttons[0].wasReleased()){
-        if (!buttons_lit[0]) {
-            buttons_lit[0] = true;
-            button_colors[0] = 0;
-            Debug.print("button color "); Debug.print(button_colors[0]); Debug.print(" "); Debug.println(colors[button_colors[0]]);
-        } else if (++button_colors[0] >= colors_count) {
-            buttons_lit[0] = false;
-            button_colors[0] = 0;
-            Debug.println("button color off");
-        }
-        return true;
-    }
-#endif
-
     return false;
 }
 
 void handleButton(int i) {
     if (buttons[i].pressedFor(1000) && !buttons_suppressed[i]) {
-        sendButtonKey(i + BUTTON_COUNT);
-        flashPixel(i, PURPLE);
-        buttons_suppressed[i] = true;
-
 #ifdef DEBUG_LOG
         Debug.print("long-press "); Debug.println(i);
 #endif
 
-    } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
-        sendButtonKey(i);
-        flashPixel(i, CYAN);
+        sendButtonKey(i + BUTTON_COUNT);
+        flashPixel(i, PURPLE);
+        buttons_suppressed[i] = true;
 
+    } else if (buttons[i].wasReleased() && !buttons_suppressed[i]) {
 #ifdef DEBUG_LOG
         Debug.print("press "); Debug.println(i);
 #endif
+
+        sendButtonKey(i);
+        flashPixel(i, CYAN);
 
     } else if (buttons[i].isPressed()) {
         setPixelColor(i, BLUE);
@@ -415,7 +407,10 @@ void setup() {
     pixels.clear();
     setupEffects();
     pixels.setBrightness(10);
+    startEffect();
 }
+
+int boot_anim = 9000;
 
 void loop() {
     handleLedStatus();
@@ -424,6 +419,13 @@ void loop() {
 
     if (effect_active) pixels_effect.service();
     else pixels.show();
+
+    if (effect_active && boot_anim == 5) {
+        stopEffect();
+    }
+    if (boot_anim > 0) {
+        boot_anim -= 5;
+    }
 
     delay(5);
 }
