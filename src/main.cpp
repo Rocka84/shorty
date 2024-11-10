@@ -408,6 +408,9 @@ void setup() {
     setupEffects();
     pixels.setBrightness(10);
     startEffect();
+    if (!Keyboard.isConnected()) {
+        pixels_effect.setColor(RED);
+    }
 }
 
 int boot_anim = 9000;
