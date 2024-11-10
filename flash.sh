@@ -4,43 +4,34 @@ model="atmega16u2"
 dfu_prog="dfu-programmer"
 # dfu_prog="/home/dilli/arduino/dfu-programmer_0-6-1"
 
-to_arduino=
-to_keyboard=
+to_arduino=1
+to_keyboard=1
 flash_code=1
 
 function showHelp() {
     cat <<-EOD
-  -a | arduino    flash arduino firmware (if needed)
-  -A | Arduino    flash arduino firmware and stop
-  -k | keyboard   flash keyboard firmware in the end
-  -K | Keyboard   only flash keyboard firmware
-  -F | full       flash arduino firmware, then flash code, then flash keyboard firmware
+  -a | arduino    stay at arduino firmware
+  -A | Arduino    only flash arduino firmware but no code
+  -k | keyboard   only flash keyboard firmware
+
+  default: flash arduino firmware if needed, flash code, flash keyboard firmware
 EOD
 }
 
 while [ -n "$1" ]; do
     case "$1" in
         "-a"|"arduino")
-            to_arduino=1
+            to_keyboard=
             ;;
         "-A"|"Arduino")
-            to_arduino=1
+            to_keyboard=
             flash_code=
             ;;
         "-k"|"keyboard")
-            to_keyboard=1
-            ;;
-        "-K"|"Keyboard")
-            to_keyboard=1
             to_arduino=
             flash_code=
             ;;
-        "-F"|"full")
-            to_arduino=1
-            flash_code=1
-            to_keyboard=1
-            ;;
-        *)
+        "-h"|"--help")
             showHelp
             exit 0
             ;;
@@ -54,33 +45,35 @@ done
 # Keyboard: Atmel Corp. LUFA Keyboard Demo Application
 
 function waitForDFU() {
-    while ! lsusb | grep -q  " DFU bootloader"; do
+    while ! lsusb | grep -q  "DFU bootloader"; do
         echo "Put your Arduino in DFU mode and press enter."
         read
     done
 }
 
+echo -n "current mode: "
 if lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
-    echo "Arduino mode"
+    echo "Arduino"
     to_arduino=
 elif lsusb | grep -q  "DFU bootloader"; then
     echo "Bootloader"
 elif lsusb | grep -q  "LUFA Keyboard"; then
-    echo "Keyboard mode"
-    to_keyboard=
+    echo "Keyboard (LUFA)"
+elif lsusb | grep -q  "Shorty"; then
+    echo "Keyboard (Shorty)"
+else
+    echo "unknown!"
+    exit 1
 fi
 
-if [ -z "$to_arduino" ] && [ "$flash_code"=="1" ] && ! lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
-    to_arduino=1
-fi
+# echo "flash_code $flash_code"
+# echo "to_arduino $to_arduino"
+# echo "to_keyboard $to_keyboard"
 
-if [ -n "$to_arduino" ] && lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
-    to_arduino=
-fi
 
-to_arduino=
 
 if [ -n "$to_arduino" ]; then
+    echo "flashing Arduino firmware"
     waitForDFU
 
     echo sudo "$dfu_prog" "$model" erase
@@ -89,7 +82,7 @@ if [ -n "$to_arduino" ]; then
 
     if [ $? != 0 ]; then
         echo "Arduino not found"
-        exit 1
+        exit 2
     fi
 
     echo "Unplug your Arduino, plug it back in and press enter."
@@ -103,15 +96,17 @@ fi
 
 
 if [ -n "$to_keyboard" ]; then
+    echo "flashing Keyboard firmware"
     waitForDFU
 
     sudo "$dfu_prog" "$model" erase
-    sudo "$dfu_prog" "$model" flash fw/Arduino-keyboard-0.3.hex
+    sudo "$dfu_prog" "$model" flash fw/Arduino-keyboard-shorty.hex
 
     if [ $? != 0 ]; then
         echo "Arduino not found"
-        exit 1
+        exit 3
     fi
 
     echo "Unplug your Arduino and plug it back in. Done."
 fi
+
