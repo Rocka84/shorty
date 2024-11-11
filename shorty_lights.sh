@@ -20,8 +20,8 @@
 # LED_CAPSLOCK -----/|
 # LED_NUMLOCK -------/
 
-device_vid="03eb"
-device_pid="2042"
+device_vid="1209"
+device_pid="fabd"
 device_path=
 
 function help() {
@@ -157,8 +157,19 @@ while [ -n "$1" ]; do
             sendBits 1 1 1 0
             ;;
         "effect")
-            # 0b1111 / 15
-            sendBits 1 1 1 1
+            if [ "$2" == "next" ]; then
+                sendBits 1 0 0 0
+                shift
+            elif [ "$2" == "color" ]; then
+                sendBits 0 1 0 0
+                shift
+            elif [ "$2" == "speed" ]; then
+                sendBits 0 0 1 0
+                shift
+            else
+                # 0b1111 / 15
+                sendBits 1 1 1 1
+            fi
             ;;
         "ensureAccess")
             findDevicePath
