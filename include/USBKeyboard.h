@@ -62,9 +62,9 @@ class USBKeyboard {
 
         void sendKeyStroke(byte keyStroke, byte modifiers) {
             if (!connected) return;
-            Serial.write(modifiers);     // Modifier Keys
+            Serial.write(modifiers);  // Modifier Keys
             Serial.write(0);          // Reserved
-            Serial.write(keyStroke);     // Keycode 1
+            Serial.write(keyStroke);  // Keycode 1
             Serial.write(0);          // Keycode 2
             Serial.write(0);          // Keycode 3
             Serial.write(0);          // Keycode 4

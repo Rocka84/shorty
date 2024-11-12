@@ -2,14 +2,9 @@
 #include <USBKeyboard.h>
 #include <JC_Button.h>
 #include <Encoder.h>
-#include <math.h>
 
 #include <Adafruit_NeoPixel.h>
 #include <WS2812FX.h>
-
-#ifdef __AVR__
-#include <avr/power.h> // Required for 16 MHz Adafruit Trinket
-#endif
 
 // #define DEBUG_LOG
 // #define DEBUG_SERIAL
@@ -34,6 +29,8 @@
 #define Debug Serial
 #endif
 
+#define DIM_75(c) (uint32_t)(((c >> 1) + c) & 0x3f3f3f3f)
+
 byte button_pins[] = {PIN_BTN_A, PIN_BTN_B, PIN_BTN_C,
                         PIN_BTN_D, PIN_BTN_E, PIN_BTN_F};
 
@@ -53,7 +50,20 @@ int rotary_key_ccw = KEY_VOLUME_DOWN;
 
 Adafruit_NeoPixel pixels(BUTTON_COUNT, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
 
+int colors_count = 7;
+uint32_t colors[] = {
+    BLUE,
+    CYAN,
+    GREEN,
+    YELLOW,
+    RED,
+    MAGENTA,
+    WHITE
+};
+
 bool backlight = false;
+int backlight_color = colors_count - 1;
+
 uint32_t color_default = pixels.Color(70, 70, 70);
 uint32_t color_off = pixels.Color(0, 0, 0);
 
@@ -77,17 +87,6 @@ int effects[] = {
 int effects_count = 6;
 int effects_index = 0;
 
-int colors_count = 7;
-uint32_t colors[] = {
-    BLUE,
-    CYAN,
-    GREEN,
-    YELLOW,
-    RED,
-    PURPLE,
-    WHITE
-};
-
 bool led_latch_handled = false;
 
 
@@ -100,6 +99,13 @@ void flashPixel(int button, uint32_t color) {
     setPixelColor(button, color);
     pixels.show();
     delay(80);
+}
+
+void nextBacklightColor() {
+    backlight_color = (backlight_color + 1) % colors_count;
+#ifdef DEBUG_LOG
+    Debug.print("backlight color "); Debug.print(backlight_color); Debug.print(" 0x"); Debug.println(colors[backlight_color], HEX);
+#endif
 }
 
 void setupEffects() {
@@ -227,8 +233,17 @@ void handleLedStatus() {
             nextEffectSpeed();
         }
 
-    } else if (command == 0) { // 0b0000 backlight on / 0b1000 backlight off
-        backlight = param;
+    } else if (command == 0) { // 0bX000 backlight on/next/off
+        if (param && !backlight) { // turn on
+            backlight = true;
+        } else if (param) { // already on, next color
+            nextBacklightColor();
+
+        } else if (backlight) { // not off, turn off
+            backlight = false;
+        } else { // already off, reset color
+            backlight_color = colors_count - 1;
+        }
 
     } else if (command >= 1 && command <= 6) { // 0bX001 - 0bX110 button on/next/off
         if (param && !buttons_lit[command - 1]) { // turn on
@@ -253,10 +268,13 @@ void handleLedStatus() {
         }
 
     } else if (command == 7 && !param) { // 0b0111 reset
+        backlight_color = colors_count - 1;
         for (int i = 0; i < BUTTON_COUNT; i++) {
             buttons_lit[i] = false;
             button_colors[i] = 0;
         }
+        backlight = false;
+        backlight_color = colors_count - 1;
         stopEffect();
         effects_index = 0;
         effect_color = 0;
@@ -267,7 +285,6 @@ void handleLedStatus() {
 void sendButtonKey(int index){
 #if defined(DEBUG_LOG) && !defined(DEBUG_SERIAL)
     Debug.print("key "); Debug.println(button_keys[index]);
-    return;
 #endif
     if (button_keys[index] == 0) return;
     Keyboard.sendKeyStroke(button_keys[index]);
@@ -316,6 +333,12 @@ bool handleButtonCombos() {
         return true;
     }
 
+    if (backlight && buttons[3].isPressed() && buttons[2].wasReleased()) {
+        nextBacklightColor();
+        buttons_suppressed[3] = true;
+        return true;
+    }
+
     return false;
 }
 
@@ -347,7 +370,7 @@ void handleButton(int i) {
         //skip
 
     } else if(backlight) {
-        setPixelColor(i, color_default);
+        setPixelColor(i, DIM_75(colors[backlight_color]));
 
     } else {
         setPixelColor(i, color_off);
@@ -377,7 +400,7 @@ void handleRotary() {
     int rotary_pos_new = rotary.read();
     if (rotary_pos_new != rotary_pos && rotary_pos_new % 4 == 0) {
 #ifdef DEBUG_LOG
-        Debug.println(); Debug.print("rotary "); Debug.print(rotary_pos_new);
+        Debug.print("rotary "); Debug.print(rotary_pos_new);
         if (rotary_pos_new > rotary_pos) Debug.println(" >>");
         else Debug.println(" <<");
 #endif
@@ -413,7 +436,7 @@ void setup() {
     }
 }
 
-int boot_anim = 9000;
+int boot_anim = 7500;
 
 void loop() {
     handleLedStatus();
