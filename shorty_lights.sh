@@ -93,6 +93,8 @@ function sendBits() {
         exit 1
     fi
 
+    # echo "sendBits $1 $2 $3 $4   = 0b$4$3$2$1"
+
     # unlatch
     setLed kana "0"
     setLed numlock "$1"
@@ -120,18 +122,17 @@ while [ -n "$1" ]; do
             ;;
         "light")
             # 0bX000
-            state=0
-            [ "$2" == "1" ] && state=1
-            sendBits 0 0 0 "$state"
+            if [ "$2" == "0" ]; then
+                sendBits 0 0 0 0
+            elif [ "$2" == "00" ]; then
+                sendBits 0 0 0 0
+                sendBits 0 0 0 0
+            elif [ "$2" -ge 1 ]; then
+                for i in $(seq 1 "$2"); do
+                    sendBits 0 0 0 1
+                done
+            fi
             shift
-            ;;
-        "light_on")
-            # 0b1000 / 8
-            sendBits 0 0 0 1
-            ;;
-        "light_off")
-            # 0b0000
-            sendBits 0 0 0 0
             ;;
         "highlight")
             # 0b001 - 0b110 / 1 - 6
@@ -171,6 +172,10 @@ while [ -n "$1" ]; do
                 sendBits 1 1 1 1
             fi
             ;;
+        "sleep")
+            sleep "$2"
+            shift
+            ;;
         "ensureAccess")
             findDevicePath
             ensureAccess
@@ -180,11 +185,17 @@ while [ -n "$1" ]; do
                 echo "please run as root"
                 exit 1
             fi
-            if [ ! -x "/usr/local/bin/shorty_lights" ]; then
+            if [ "$2" == "-f" ]; then
+                force=1
+                shift
+            fi
+            if [ -n "$force" ] || [ ! -x "/usr/local/bin/shorty_lights" ]; then
                 cp "$(realpath "$0")" "/usr/local/bin/shorty_lights"
                 echo "$(realpath "$0") copied to /usr/local/bin/"
+            else
+                echo "/usr/local/bin/shorty_lights already exists"
             fi
-            if [ ! -f "/etc/udev/rules.d/00-shorty.rules" ]; then
+            if [ -n "$force" ] || [ ! -f "/etc/udev/rules.d/00-shorty.rules" ]; then
                 rules="$(dirname "$0")/00-shorty.rules"
                 if [ -f "$rules" ]; then
                     cp "$(dirname "$0")/00-shorty.rules" "/etc/udev/rules.d/00-shorty.rules"
@@ -194,7 +205,10 @@ while [ -n "$1" ]; do
                 else
                     echo "udev rules file not found"
                 fi
+            else
+                echo "/etc/udev/rules.d/00-shorty.rules already exists"
             fi
+            exit 0
             ;;
         "debug")
             echo "device: $device_vid:$device_pid"
@@ -213,6 +227,10 @@ while [ -n "$1" ]; do
             else
                 echo "no"
             fi
+            ;;
+        "sendBits")
+            sendBits "$2" "$3" "$4" "$5"
+            shift 4
             ;;
         *)
             echo "unknown command '$1'"
