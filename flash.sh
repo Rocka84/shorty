@@ -2,7 +2,6 @@
 model="atmega16u2"
 
 dfu_prog="dfu-programmer"
-# dfu_prog="/home/dilli/arduino/dfu-programmer_0-6-1"
 
 to_arduino=1
 to_keyboard=1
@@ -27,7 +26,7 @@ while [ -n "$1" ]; do
             to_keyboard=
             flash_code=
             ;;
-        "-k"|"keyboard")
+        "-k"|"-K"|"keyboard")
             to_arduino=
             flash_code=
             ;;
@@ -39,27 +38,27 @@ while [ -n "$1" ]; do
     shift
 done
 
-# output of lsusb:
-# default: Arduino SA Uno (CDC ACM)
-# DFU: Atmel Corp. atmega16u2 DFU bootloader
-# Keyboard: Atmel Corp. LUFA Keyboard Demo Application
+dev_name_arduino="Arduino SA Uno"
+dev_name_dfu="DFU bootloader"
+dev_name_keyboard="Shorty Keyboard"
+dev_name_lufa="LUFA Keyboard"
 
 function waitForDFU() {
-    while ! lsusb | grep -q  "DFU bootloader"; do
-        echo "Put your Arduino in DFU mode and press enter."
-        read
+    echo "Put your Arduino in DFU mode now."
+    while ! lsusb | grep -q  "$dev_name_dfu"; do
+        sleep 1
     done
 }
 
 echo -n "current mode: "
-if lsusb | grep -q  " Arduino SA Uno (CDC ACM)"; then
+if lsusb | grep -q  "$dev_name_arduino"; then
     echo "Arduino"
     to_arduino=
-elif lsusb | grep -q  "DFU bootloader"; then
-    echo "Bootloader"
-elif lsusb | grep -q  "LUFA Keyboard"; then
+elif lsusb | grep -q  "$dev_name_dfu"; then
+    echo "DFU"
+elif lsusb | grep -q  "$dev_name_lufa"; then
     echo "Keyboard (LUFA)"
-elif lsusb | grep -q  "Shorty"; then
+elif lsusb | grep -q  "$dev_name_keyboard"; then
     echo "Keyboard (Shorty)"
 else
     echo "unknown!"
@@ -76,7 +75,6 @@ if [ -n "$to_arduino" ]; then
     echo "flashing Arduino firmware"
     waitForDFU
 
-    echo sudo "$dfu_prog" "$model" erase
     sudo "$dfu_prog" "$model" erase
     sudo "$dfu_prog" "$model" flash fw/Arduino-usbserial-uno.hex
 
@@ -85,8 +83,12 @@ if [ -n "$to_arduino" ]; then
         exit 2
     fi
 
-    echo "Unplug your Arduino, plug it back in and press enter."
-    read
+    [ -z "$flash_code" ] && exit 0
+
+    echo "Unplug your Arduino and plug it back in."
+    while ! lsusb | grep -q  "$dev_name_arduino"; do
+        sleep 1
+    done
 fi
 
 
