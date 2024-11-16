@@ -27,13 +27,33 @@ device_path=
 function help() {
     cat <<-END
 Usage:
-$0 [ clear | light [0|1] | highlight [1-6] [0|1] ] [...]
-    clear      turn off backlight and all highlights
-    light      turn backlight on (1) or off (0)
-    highlight  turn highlight of button [index] on (1) or off (0)
+$0 [ r[eset] | l[ight] [0|1|00|2-n] | b[utton] [1-6] [0|1|00|2-n] | e[ffect] | s[leep] [1-n] ] [...]
+    r | reset      turn off backlight and all highlights
+    l | light      turn backlight on (1) or off (0)
+    b | button     turn highlight of button [index] on (1) or off (0)
+    e | effect     toggle effect mode
+    s | sleep [n]  sleep [n] seconds
 
-Multiple commands can be chained:
-    $0 clear highlight 1 1 highlight 6 1
+Parameter for light and button:
+    1   turn on or set next color if already on
+    0   turn off or reset color if already off
+    00  turn off and reset (same as 0 twice)
+    n   turn on and or set next color n-times
+
+Examples:
+    # commands can be chained: reset and turn button 1 and 6 on
+    $0 reset button 1 1 button 6 1
+    # set button 3 to the fifth color and turn back off
+    $0 b 3 00 b 3 5 b 3 0
+    # turn button 3 on with the last used color
+    $0 b 3 1
+    # next color for button 3
+    $0 b 3 1
+    # turn button 3 off and reset colot
+    $0 b 3 00
+    # blink button 2 three times with second color
+    $0 b 2 00 b 2 2 s 1 b 2 0 s 1 b 2 1 s 1 b 2 0 s 1 b 2 1 s 1 b 2 0
+
 END
     exit ${1:-0}
 }
@@ -120,7 +140,7 @@ while [ -n "$1" ]; do
             device_path="/sys/class/leds/input$2::LED/brightness"
             shift
             ;;
-        "light")
+        "light"|"l")
             # 0bX000
             if [ "$2" == "0" ]; then
                 sendBits 0 0 0 0
@@ -134,7 +154,7 @@ while [ -n "$1" ]; do
             fi
             shift
             ;;
-        "highlight")
+        "highlight"|"h"|"button"|"b")
             # 0b001 - 0b110 / 1 - 6
             if [ -z "$2" ] || [ -z "$3" ] || [ $2 -gt 6 ]; then
                 echo "invalid command: '$1 $2 $3'"
@@ -153,18 +173,18 @@ while [ -n "$1" ]; do
             fi
             shift 2
             ;;
-        "clear")
+        "clear"|"reset"|"r")
             # 0b0111 / 7
             sendBits 1 1 1 0
             ;;
-        "effect")
-            if [ "$2" == "next" ]; then
+        "effect"|"e")
+            if [ "$2" == "next" ] || [ "$2" == "n" ]; then
                 sendBits 1 0 0 0
                 shift
-            elif [ "$2" == "color" ]; then
+            elif [ "$2" == "color" ] || [ "$2" == "c" ]; then
                 sendBits 0 1 0 0
                 shift
-            elif [ "$2" == "speed" ]; then
+            elif [ "$2" == "speed" ] || [ "$2" == "s" ]; then
                 sendBits 0 0 1 0
                 shift
             else
@@ -172,7 +192,7 @@ while [ -n "$1" ]; do
                 sendBits 1 1 1 1
             fi
             ;;
-        "sleep")
+        "sleep"|"s")
             sleep "$2"
             shift
             ;;
