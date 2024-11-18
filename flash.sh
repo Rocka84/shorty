@@ -1,4 +1,6 @@
 #!/bin/bash
+cd "$(dirname "$0")"
+
 model="atmega16u2"
 
 dfu_prog="dfu-programmer"
@@ -73,6 +75,7 @@ fi
 
 if [ -n "$to_arduino" ]; then
     echo "flashing Arduino firmware"
+    sudo -v
     waitForDFU
 
     sudo "$dfu_prog" "$model" erase
@@ -99,6 +102,7 @@ fi
 
 if [ -n "$to_keyboard" ]; then
     echo "flashing Keyboard firmware"
+    sudo -v
     waitForDFU
 
     sudo "$dfu_prog" "$model" erase
