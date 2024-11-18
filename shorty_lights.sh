@@ -94,8 +94,6 @@ function ensureAccess() {
 }
 
 function setLed() {
-    # echo "$2" | sudo tee ${device_path/LED/$1} > /dev/null
-    ensureAccess
     echo "$2" > ${device_path/LED/$1}
 }
 
@@ -114,6 +112,8 @@ function sendBits() {
     fi
 
     # echo "sendBits $1 $2 $3 $4   = 0b$4$3$2$1"
+
+    ensureAccess
 
     # unlatch
     setLed kana "0"
