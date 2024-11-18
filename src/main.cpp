@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <USBKeyboard.h>
+#include <LightweightRingBuff.h>
 #include <JC_Button.h>
 #include <Encoder.h>
 
@@ -67,7 +68,10 @@ int backlight_color = colors_count - 1;
 uint32_t color_default = pixels.Color(70, 70, 70);
 uint32_t color_off = pixels.Color(0, 0, 0);
 
-int button_pixels[] = { 0, 1, 2, 5, 4, 3 };
+int button_pixels[] = {
+    0, 1, 2,
+    5, 4, 3
+};
 int button_colors[] = { 0, 0, 0, 0, 0, 0 };
 
 WS2812FX pixels_effect = WS2812FX(BUTTON_COUNT - 1, PIN_NEOPIXELS, NEO_GRB + NEO_KHZ800);
@@ -75,6 +79,7 @@ bool effect_active = false;
 int effect_color = 0;
 uint32_t effect_speed = 3000;
 
+int effects_count = 6;
 int effects[] = {
     FX_MODE_BREATH,
     FX_MODE_RAINBOW,
@@ -83,9 +88,9 @@ int effects[] = {
     FX_MODE_SCAN,
     FX_MODE_CHASE_COLOR
 };
+int effect_index = 0;
 
-int effects_count = 6;
-int effects_index = 0;
+int boot_anim = 7700;
 
 bool led_latch_handled = false;
 
@@ -112,36 +117,41 @@ void setupEffects() {
     pixels_effect.init();
     pixels_effect.setColor(colors[effect_color]);
     pixels_effect.setSpeed(effect_speed);
-    pixels_effect.setMode(effects[effects_index]);
+    pixels_effect.setMode(effects[effect_index]);
+}
+
+void setEffect(int index) {
+    effect_index = index;
+    pixels_effect.setMode(effects[effect_index]);
+    pixels_effect.setColor(colors[effect_color]);
+    pixels_effect.setSpeed(effect_speed);
+
+    // special defaults for some effects
+    if (effects[effect_index] == FX_MODE_FIRE_FLICKER) {
+        pixels_effect.setColor(RED);
+        pixels_effect.setSpeed(1000);
+    } else if (effects[effect_index] == FX_MODE_RAINBOW) {
+        pixels_effect.setSpeed(8000);
+    } else if (effects[effect_index] == FX_MODE_SCAN && effect_speed > 2000) {
+        pixels_effect.setSpeed(2000);
+    } else if (effects[effect_index] == FX_MODE_CHASE_COLOR && effect_speed > 2000) {
+        pixels_effect.setSpeed(2000);
+    }
+
+#ifdef DEBUG_LOG
+    Debug.print("effect mode "); Debug.print(effect_index); Debug.print(" "); Debug.print(effects[effect_index]); Debug.print(" "); Debug.println(pixels_effect.getModeName(effects[effect_index]));
+#endif
+}
+
+void nextEffect() {
+    setEffect((effect_index + 1) % effects_count);
 }
 
 void startEffect() {
-    if (effect_active) {
-        effects_index = (effects_index + 1) % effects_count;
-        pixels_effect.setColor(colors[effect_color]);
-        pixels_effect.setSpeed(effect_speed);
-
-        // special defaults for some effects
-        if (effects[effects_index] == FX_MODE_FIRE_FLICKER) {
-            pixels_effect.setColor(RED);
-            pixels_effect.setSpeed(1000);
-        } else if (effects[effects_index] == FX_MODE_RAINBOW) {
-            pixels_effect.setSpeed(8000);
-        } else if (effects[effects_index] == FX_MODE_SCAN && effect_speed > 2000) {
-            pixels_effect.setSpeed(2000);
-        } else if (effects[effects_index] == FX_MODE_CHASE_COLOR && effect_speed > 2000) {
-            pixels_effect.setSpeed(2000);
-        }
-
-#ifdef DEBUG_LOG
-        Debug.print("effect mode "); Debug.print(effects_index); Debug.print(" "); Debug.print(effects[effects_index]); Debug.print(" "); Debug.println(pixels_effect.getModeName(effects[effects_index]));
-#endif
-    } else {
-        pixels.setBrightness(66);
-    }
+    if (effect_active) return;
 
     effect_active = true;
-    pixels_effect.setMode(effects[effects_index]);
+    pixels.setBrightness(66);
     pixels_effect.start();
 }
 
@@ -152,21 +162,42 @@ void stopEffect() {
     pixels.setBrightness(10);
 }
 
-void nextEffectColor() {
-    effect_color = (effect_color + 1) % colors_count;
+void setEffectColor(int index) {
+    effect_color = index;
     pixels_effect.setColor(colors[effect_color]);
 #ifdef DEBUG_LOG
     Debug.print("effect color "); Debug.print(effect_color); Debug.print(" 0x"); Debug.println(colors[effect_color], HEX);
 #endif
 }
 
-void nextEffectSpeed() {
-    effect_speed -= 1000;
-    if (effect_speed < 1000 || effect_speed > 10000) effect_speed = 10000;
+void nextEffectColor() {
+    setEffectColor((effect_color + 1) % colors_count);
+}
+
+void setEffectSpeed(int speed) {
+    if (speed < 1000 || speed > 10000) return;
+    effect_speed = speed;
     pixels_effect.setSpeed(effect_speed);
 #ifdef DEBUG_LOG
     Debug.print("effect speed "); Debug.println(effect_speed);
 #endif
+}
+
+void nextEffectSpeed() {
+    setEffectSpeed(effect_speed - 1000);
+}
+
+void reset() {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        buttons_lit[i] = false;
+        button_colors[i] = 0;
+    }
+    backlight = false;
+    backlight_color = colors_count - 1;
+    stopEffect();
+    effect_index = 0;
+    effect_color = 0;
+    effect_speed = 3000;
 }
 
 /*
@@ -180,30 +211,7 @@ void nextEffectSpeed() {
  * 2    next effect color
  * 4    next effect speed
  */
-void handleLedStatus() {
-    uint8_t led_status;
-
-#if defined(DEBUG_LOG) && !defined(DEBUG_SERIAL)
-    if (Debug.available() == 0) return;
-
-    int read = Debug.read();
-    if (read >= 48 && read <= 57) {
-        led_status = read - 48;
-    } else if (read >= 97 && read <= 102) {
-        led_status = read - 87;
-    } else {
-        return;
-    }
-
-    Debug.print("serial read ");
-    Debug.print(led_status >> 3 & 1 ? '1' : '0');
-    Debug.print(led_status >> 2 & 1 ? '1' : '0');
-    Debug.print(led_status >> 1 & 1 ? '1' : '0');
-    Debug.print(led_status >> 0 & 1 ? '1' : '0');
-    Debug.print(" ("); Debug.print(led_status, HEX); Debug.println(")");
-
-#else
-    led_status = Keyboard.readLedStatus();
+void handleLedStatus(uint8_t led_status) {
 
     int latch = led_status >> 4; // bit 5
     if (latch == 1 && led_latch_handled) {
@@ -213,8 +221,6 @@ void handleLedStatus() {
         led_latch_handled = false;
         return;
     }
-#endif
-
 
     led_latch_handled = true;
     int command = led_status & 7; // bits 1-3
@@ -226,7 +232,7 @@ void handleLedStatus() {
 
     if (effect_active) {
         if (command == 1) { // 0bX001 next effect
-            startEffect();
+            nextEffect();
         } else if (command == 2) { // 0bX010
             nextEffectColor();
         } else if (command == 4) { // 0bX100
@@ -267,18 +273,8 @@ void handleLedStatus() {
             stopEffect();
         }
 
-    } else if (command == 7 && !param) { // 0b0111 reset
-        backlight_color = colors_count - 1;
-        for (int i = 0; i < BUTTON_COUNT; i++) {
-            buttons_lit[i] = false;
-            button_colors[i] = 0;
-        }
-        backlight = false;
-        backlight_color = colors_count - 1;
-        stopEffect();
-        effects_index = 0;
-        effect_color = 0;
-        effect_speed = 3000;
+    } else if (command == 7 && !param) {
+        reset();
     }
 }
 
@@ -302,7 +298,8 @@ bool handleButtonCombos() {
     }
 
     if (buttons[3].isPressed() && buttons[5].wasReleased()) {
-        startEffect();
+        if (effect_active) nextEffect();
+        else startEffect();
         buttons_suppressed[3] = true;
 
 #ifdef DEBUG_LOG
@@ -414,6 +411,91 @@ void handleRotary() {
     }
 }
 
+
+RingBuff_t Serial_Buffer;
+uint8_t serial_data[7] = { 0 };
+uint8_t serial_buffer_bytes = 0;
+
+bool onOffToggle(uint8_t data, bool current) {
+    if (data == 0) {
+        return false;
+    }
+    if (data == 1) {
+        return true;
+    }
+    if (data == 2) {
+        return !current;
+    }
+    return current;
+}
+
+int getIndex(uint8_t data, uint8_t current, uint8_t count) {
+    if (data > 0 && data <= count) {
+        return data - 1;
+    }
+    return current;
+}
+
+void bufferSerial() {
+    if (!Serial.available())
+        return;
+
+    if (serial_buffer_bytes > 0 ) {
+        while (Serial.available() && serial_buffer_bytes > 0) {
+            serial_buffer_bytes--;
+            RingBuffer_Insert(&Serial_Buffer, Serial.read());
+        }
+    }
+    else if (Serial.read() == 0xCC) {
+        serial_buffer_bytes = 7;
+    }
+}
+
+void handleSerial() {
+    if (RingBuffer_GetCount(&Serial_Buffer) < 7)
+        return;
+
+    for (uint8_t i=0; i<7; i++) {
+        serial_data[i] = RingBuffer_Remove(&Serial_Buffer);
+    }
+
+    if (serial_data[0] == 0xB0) {
+        backlight = onOffToggle(serial_data[1], backlight);
+        backlight_color = getIndex(serial_data[2], backlight_color, colors_count);
+    }
+
+    else if (serial_data[0] == 0xBF && serial_data[1] > 0 && serial_data[1] <= BUTTON_COUNT) {
+        int8_t index = serial_data[1] - 1;
+        if (index >= 0 && index < BUTTON_COUNT) {
+            buttons_lit[index] = onOffToggle(serial_data[2], buttons_lit[index]);
+            button_colors[index] = getIndex(serial_data[3], button_colors[index], colors_count);
+        }
+    }
+
+    else if (serial_data[0] == 0xF0) {
+        bool target = onOffToggle(serial_data[1], effect_active);
+        setEffect(getIndex(serial_data[2], effect_index, effects_count));
+        setEffectColor(getIndex(serial_data[3], effect_color, colors_count));
+        if (serial_data[4] > 0) {
+            setEffectSpeed(serial_data[4]*1000);
+        }
+
+        if (target && !effect_active) {
+            startEffect();
+        }else if (!target && effect_active) {
+            stopEffect();
+        }
+    }
+
+    else if (serial_data[0] == 0xDD) {
+        handleLedStatus(serial_data[1]);
+    }
+
+    else if (serial_data[0] == 0x99) {
+        reset();
+    }
+}
+
 void setup() {
 #ifdef DEBUG_LOG
     Debug.begin(9600);
@@ -431,15 +513,16 @@ void setup() {
     setupEffects();
     pixels.setBrightness(10);
     startEffect();
+    delay(500);
     if (!Keyboard.isConnected()) {
         pixels_effect.setColor(RED);
     }
+
+	RingBuffer_InitBuffer(&Serial_Buffer);
 }
 
-int boot_anim = 7500;
-
 void loop() {
-    handleLedStatus();
+    // handleLedStatus();
     handleRotary();
     handleButtons();
 
@@ -452,6 +535,9 @@ void loop() {
     if (boot_anim > 0) {
         boot_anim -= 5;
     }
+
+    bufferSerial();
+    handleSerial();
 
     delay(5);
 }
