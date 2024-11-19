@@ -121,6 +121,8 @@ void setupEffects() {
 }
 
 void setEffect(int index) {
+    if (effect_index == index) return;
+
     effect_index = index;
     pixels_effect.setMode(effects[effect_index]);
     pixels_effect.setColor(colors[effect_color]);
@@ -163,6 +165,8 @@ void stopEffect() {
 }
 
 void setEffectColor(int index) {
+    if (effect_color == index) return;
+
     effect_color = index;
     pixels_effect.setColor(colors[effect_color]);
 #ifdef DEBUG_LOG
@@ -175,7 +179,8 @@ void nextEffectColor() {
 }
 
 void setEffectSpeed(int speed) {
-    if (speed < 1000 || speed > 10000) return;
+    if (effect_speed == speed || speed < 1000 || speed > 10000) return;
+
     effect_speed = speed;
     pixels_effect.setSpeed(effect_speed);
 #ifdef DEBUG_LOG
