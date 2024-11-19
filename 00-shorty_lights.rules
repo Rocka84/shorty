@@ -1,0 +1,1 @@
+SUBSYSTEM=="input", ATTRS{id/vendor}=="1209", ATTRS{id/product}=="fabd", ACTION=="add", RUN+="/usr/local/bin/shorty_lights ensureAccess"

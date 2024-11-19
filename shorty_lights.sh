@@ -209,16 +209,18 @@ while [ -n "$1" ]; do
                 force=1
                 shift
             fi
-            if [ -n "$force" ] || [ ! -x "/usr/local/bin/shorty_lights" ]; then
-                cp "$(realpath "$0")" "/usr/local/bin/shorty_lights"
-                echo "$(realpath "$0") copied to /usr/local/bin/"
+            target="/usr/local/bin/shorty_lights"
+            if [ -n "$force" ] || [ ! -x "$target" ]; then
+                cp "$(realpath "$0")" "$target"
+                echo "$(basename "$0") copied to /usr/local/bin/"
             else
-                echo "/usr/local/bin/shorty_lights already exists"
+                echo "$target already exists"
             fi
-            if [ -n "$force" ] || [ ! -f "/etc/udev/rules.d/00-shorty.rules" ]; then
-                rules="$(dirname "$0")/00-shorty.rules"
+            target="/etc/udev/rules.d/00-shorty_lights.rules"
+            if [ -n "$force" ] || [ ! -f "$target" ]; then
+                rules="$(dirname "$0")/00-shorty_lights.rules"
                 if [ -f "$rules" ]; then
-                    cp "$(dirname "$0")/00-shorty.rules" "/etc/udev/rules.d/00-shorty.rules"
+                    cp "$(dirname "$0")/00-shorty_lights.rules" "$target"
                     udevadm control --reload-rules
                     udevadm trigger
                     echo "udev rules installed"
@@ -226,8 +228,23 @@ while [ -n "$1" ]; do
                     echo "udev rules file not found"
                 fi
             else
-                echo "/etc/udev/rules.d/00-shorty.rules already exists"
+                echo "$target already exists"
             fi
+            exit 0
+            ;;
+        "uninstall")
+            if [ "$(id -u)" != "0" ]; then
+                echo "please run as root"
+                exit 1
+            fi
+
+            rm -f "/usr/local/bin/shorty_lights"
+            echo "/usr/local/bin/shorty_lights removed"
+
+            rm -f "/etc/udev/rules.d/00-shorty_lights.rules"
+            udevadm control --reload-rules
+            udevadm trigger
+            echo "udev rules removed"
             exit 0
             ;;
         "debug")

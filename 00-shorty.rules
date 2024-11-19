@@ -1,3 +1,1 @@
 SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="fabd", MODE="0666"
-SUBSYSTEM=="input", ATTRS{id/vendor}=="1209", ATTRS{id/product}=="fabd", ACTION=="add", RUN+="/usr/local/bin/shorty_lights ensureAccess"
-
